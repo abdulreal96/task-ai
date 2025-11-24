@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Task AI Manager",
+    "slug": "task-ai-frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#6366f1"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.taskaimanager.app"
+    },
+    "android": {
+      "package": "com.taskaimanager.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#6366f1"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
