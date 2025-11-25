@@ -292,14 +292,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   taskTag: {
-    backgroundColor: '#dbeafe',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
   taskTagText: {
     fontSize: 11,
-    color: '#1e40af',
     fontWeight: '500',
   },
   taskTime: {

@@ -86,7 +86,7 @@ const initialTags: Tag[] = [
 interface TaskContextType {
   tasks: Task[];
   tags: Tag[];
-  addTask: (task: Task) => void;
+  addTask: (task: Omit<Task, 'id'>) => void;
   updateTask: (taskId: string, updates: Partial<Task>) => void;
   deleteTask: (taskId: string) => void;
 }
@@ -97,7 +97,11 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [tags, setTags] = useState<Tag[]>(initialTags);
 
-  const addTask = (task: Task) => {
+  const addTask = (taskData: Omit<Task, 'id'>) => {
+    const task: Task = {
+      ...taskData,
+      id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    };
     setTasks([task, ...tasks]);
     
     // Update tag counts

@@ -146,7 +146,7 @@ export default function RecordTaskScreen() {
 
   const confirmTasks = () => {
     extractedTasks.forEach(taskData => {
-      const newTask: Omit<Task, 'id'> = {
+      addTask({
         title: taskData.title,
         description: taskData.description,
         tags: taskData.tags,
@@ -162,8 +162,7 @@ export default function RecordTaskScreen() {
             timestamp: new Date()
           }
         ]
-      };
-      addTask(newTask);
+      });
     });
     
     // Reset
