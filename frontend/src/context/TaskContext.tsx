@@ -6,6 +6,7 @@ export type Task = {
   description: string;
   tags: string[];
   status: 'todo' | 'in-progress' | 'completed';
+  dueDate?: Date;
   timeLogged: number;
   createdAt: Date;
   updatedAt: Date;
@@ -33,6 +34,7 @@ const initialTasks: Task[] = [
     description: 'Add wallet balance feature to transporter module',
     tags: ['wallet', 'transporter', 'implement'],
     status: 'in-progress',
+    dueDate: new Date(2025, 10, 28, 17, 0),
     timeLogged: 120,
     createdAt: new Date(2025, 10, 22, 9, 30),
     updatedAt: new Date(2025, 10, 22, 11, 30),
@@ -48,6 +50,7 @@ const initialTasks: Task[] = [
     description: 'Debug login issue on mobile devices',
     tags: ['bug', 'authentication', 'fix'],
     status: 'completed',
+    dueDate: new Date(2025, 10, 25, 17, 0),
     timeLogged: 45,
     createdAt: new Date(2025, 10, 21, 14, 0),
     updatedAt: new Date(2025, 10, 21, 14, 45),
@@ -62,6 +65,7 @@ const initialTasks: Task[] = [
     description: 'Create mockups for new dashboard layout',
     tags: ['design', 'dashboard', 'ui'],
     status: 'todo',
+    dueDate: new Date(2025, 10, 30, 17, 0),
     timeLogged: 0,
     createdAt: new Date(2025, 10, 22, 8, 0),
     updatedAt: new Date(2025, 10, 22, 8, 0),

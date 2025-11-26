@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Clock, MoreVertical } from 'lucide-react-native';
+import { Clock, MoreVertical, Edit3, Trash2, PlayCircle, Calendar, Copy } from 'lucide-react-native';
 import { useTasks } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 
 export default function TaskBoardScreen() {
-  const { tasks } = useTasks();
+  const { tasks, updateTask, deleteTask } = useTasks();
   const { colors, isDarkMode } = useTheme();
   const [activeTab, setActiveTab] = useState('all');
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [showActionMenu, setShowActionMenu] = useState(false);
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -56,6 +58,73 @@ export default function TaskBoardScreen() {
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
     return 'just now';
+  };
+
+  const formatDueDate = (dueDate?: Date) => {
+    if (!dueDate) return null;
+    
+    const now = new Date();
+    const due = new Date(dueDate);
+    const diffTime = due.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    // Check if overdue
+    if (diffDays < 0) {
+      return { text: `${Math.abs(diffDays)}d overdue`, isOverdue: true };
+    }
+    
+    // Check if today
+    if (diffDays === 0) {
+      return { text: 'Due today', isToday: true };
+    }
+    
+    // Check if tomorrow
+    if (diffDays === 1) {
+      return { text: 'Due tomorrow', isSoon: true };
+    }
+    
+    // Within a week
+    if (diffDays <= 7) {
+      return { text: `Due in ${diffDays}d`, isSoon: true };
+    }
+    
+    // Format date
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+    return { text: `Due ${due.toLocaleDateString('en-US', options)}`, isNormal: true };
+  };
+
+  const handleTaskAction = (taskId: string, action: string) => {
+    setShowActionMenu(false);
+    setSelectedTask(null);
+    
+    switch (action) {
+      case 'edit':
+        // Navigate to edit screen (to be implemented)
+        console.log('Edit task:', taskId);
+        break;
+      case 'changeStatus':
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+          const statusOrder = ['todo', 'in-progress', 'completed'];
+          const currentIndex = statusOrder.indexOf(task.status);
+          const nextStatus = statusOrder[(currentIndex + 1) % statusOrder.length] as 'todo' | 'in-progress' | 'completed';
+          updateTask(taskId, { status: nextStatus });
+        }
+        break;
+      case 'delete':
+        deleteTask(taskId);
+        break;
+      case 'timer':
+        // Start/stop timer (to be implemented)
+        console.log('Toggle timer:', taskId);
+        break;
+      case 'duplicate':
+        // Duplicate task (to be implemented)
+        console.log('Duplicate task:', taskId);
+        break;
+      default:
+        break;
+    }
   };
 
   const filterTasks = () => {
@@ -124,16 +193,22 @@ export default function TaskBoardScreen() {
             <View key={task.id} style={[styles.taskCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.taskHeader}>
                 <Text style={[styles.taskTitle, { color: colors.text }]} numberOfLines={2}>{task.title}</Text>
-                <TouchableOpacity style={styles.moreButton}>
-                  <MoreVertical size={16} color="#9ca3af" />
+                <TouchableOpacity 
+                  style={styles.moreButton}
+                  onPress={() => {
+                    setSelectedTask(task.id);
+                    setShowActionMenu(true);
+                  }}
+                >
+                  <MoreVertical size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
               {/* Tags */}
               <View style={styles.tagsRow}>
                 {task.tags.slice(0, 3).map(tag => (
-                  <View key={tag} style={styles.taskTag}>
-                    <Text style={styles.taskTagText}>{tag}</Text>
+                  <View key={tag} style={[styles.taskTag, { backgroundColor: isDarkMode ? '#1e3a8a' : '#dbeafe' }]}>
+                    <Text style={[styles.taskTagText, { color: isDarkMode ? '#93c5fd' : '#1e40af' }]}>{tag}</Text>
                   </View>
                 ))}
                 {task.tags.length > 3 && (
@@ -142,6 +217,28 @@ export default function TaskBoardScreen() {
                   </View>
                 )}
               </View>
+
+              {/* Due Date */}
+              {formatDueDate(task.dueDate) && (
+                <View style={styles.dueDateContainer}>
+                  <Calendar size={12} color={
+                    formatDueDate(task.dueDate)?.isOverdue ? '#ef4444' : 
+                    formatDueDate(task.dueDate)?.isToday ? '#f59e0b' : 
+                    formatDueDate(task.dueDate)?.isSoon ? '#3b82f6' : 
+                    colors.textSecondary
+                  } />
+                  <Text style={[
+                    styles.dueDateText,
+                    { color: formatDueDate(task.dueDate)?.isOverdue ? '#ef4444' : 
+                      formatDueDate(task.dueDate)?.isToday ? '#f59e0b' : 
+                      formatDueDate(task.dueDate)?.isSoon ? '#3b82f6' : 
+                      colors.textSecondary 
+                    }
+                  ]}>
+                    {formatDueDate(task.dueDate)?.text}
+                  </Text>
+                </View>
+              )}
 
               {/* Footer */}
               <View style={styles.taskFooter}>
@@ -165,6 +262,66 @@ export default function TaskBoardScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* Action Menu Modal */}
+      <Modal
+        visible={showActionMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowActionMenu(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowActionMenu(false)}
+        >
+          <View style={[styles.actionMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.actionMenuTitle, { color: colors.text }]}>Task Actions</Text>
+            
+            <TouchableOpacity 
+              style={styles.actionItem}
+              onPress={() => selectedTask && handleTaskAction(selectedTask, 'edit')}
+            >
+              <Edit3 size={18} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Edit Task</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionItem}
+              onPress={() => selectedTask && handleTaskAction(selectedTask, 'changeStatus')}
+            >
+              <PlayCircle size={18} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Change Status</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionItem}
+              onPress={() => selectedTask && handleTaskAction(selectedTask, 'timer')}
+            >
+              <Clock size={18} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Start/Stop Timer</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionItem}
+              onPress={() => selectedTask && handleTaskAction(selectedTask, 'duplicate')}
+            >
+              <Copy size={18} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Duplicate Task</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
+
+            <TouchableOpacity 
+              style={styles.actionItem}
+              onPress={() => selectedTask && handleTaskAction(selectedTask, 'delete')}
+            >
+              <Trash2 size={18} color="#ef4444" />
+              <Text style={[styles.actionText, { color: '#ef4444' }]}>Delete Task</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -324,5 +481,55 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: '#9ca3af',
+  },
+  dueDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 12,
+  },
+  dueDateText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionMenu: {
+    width: '80%',
+    maxWidth: 320,
+    borderRadius: 16,
+    padding: 8,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  actionMenuTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 8,
+  },
+  actionText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  actionDivider: {
+    height: 1,
+    marginVertical: 4,
   },
 });
