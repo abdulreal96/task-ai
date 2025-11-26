@@ -26,7 +26,7 @@ export default function ReportsScreen() {
     created: todayTasks.length,
     started: todayTasks.filter(t => t.status !== 'todo').length,
     completed: todayTasks.filter(t => t.status === 'completed').length,
-    timeLogged: todayTasks.reduce((acc, t) => acc + t.timeLogged, 0)
+    timeLogged: todayTasks.reduce((acc, t) => acc + t.timeSpent, 0)
   };
 
   // Weekly Report Data
@@ -39,7 +39,7 @@ export default function ReportsScreen() {
   const weeklyStats = {
     created: weekTasks.length,
     completed: weekTasks.filter(t => t.status === 'completed').length,
-    timeLogged: weekTasks.reduce((acc, t) => acc + t.timeLogged, 0),
+    timeLogged: weekTasks.reduce((acc, t) => acc + t.timeSpent, 0),
     productivity: weekTasks.length > 0 
       ? Math.round((weekTasks.filter(t => t.status === 'completed').length / weekTasks.length) * 100)
       : 0

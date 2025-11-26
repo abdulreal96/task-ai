@@ -1,96 +1,122 @@
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Home, CheckSquare, BarChart3, Settings } from 'lucide-react-native';
 import { TaskProvider } from './src/context/TaskContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 import DashboardScreen from './src/screens/DashboardScreen';
 import TaskBoardScreen from './src/screens/TaskBoardScreen';
 import RecordTaskScreen from './src/screens/RecordTaskScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import VerifyOtpScreen from './src/screens/VerifyOtpScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
+import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-function AppNavigator() {
+function MainTabs() {
   const { colors, isDarkMode } = useTheme();
   
   return (
-    <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={{
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textSecondary,
-          tabBarStyle: {
-            backgroundColor: colors.surface,
-            borderTopColor: colors.border,
-            borderTopWidth: 1,
-            paddingTop: 8,
-            paddingBottom: 8,
-            height: 60,
-          },
-          headerShown: false,
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          paddingTop: 8,
+          paddingBottom: 8,
+          height: 60,
+        },
+        headerShown: false,
+      }}
+    >
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
         }}
-      >
-          <Tab.Screen
-            name="Dashboard"
-            component={DashboardScreen}
-            options={{
-              tabBarIcon: ({ color, size }) => (
-                <Home color={color} size={size} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="TaskBoard"
-            component={TaskBoardScreen}
-            options={{
-              tabBarLabel: 'Tasks',
-              tabBarIcon: ({ color, size }) => (
-                <CheckSquare color={color} size={size} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="RecordTask"
-            component={RecordTaskScreen}
-            options={{
-              tabBarLabel: 'Record',
-              tabBarIcon: ({ color, size }) => (
-                <CheckSquare color={color} size={size} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="Reports"
-            component={ReportsScreen}
-            options={{
-              tabBarIcon: ({ color, size }) => (
-                <BarChart3 color={color} size={size} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{
-              tabBarIcon: ({ color, size }) => (
-                <Settings color={color} size={size} />
-              ),
-            }}
-          />
-        </Tab.Navigator>
-      </NavigationContainer>
+      />
+      <Tab.Screen
+        name="Tasks"
+        component={TaskBoardScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <CheckSquare size={size} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Record"
+        component={RecordTaskScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Reports"
+        component={ReportsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <BarChart3 size={size} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+function AppNavigator() {
+  const { colors, isDarkMode } = useTheme();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      {!isAuthenticated ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+        </Stack.Navigator>
+      ) : (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="MainTabs" component={MainTabs} />
+        </Stack.Navigator>
+      )}
+    </NavigationContainer>
   );
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <TaskProvider>
-        <AppNavigator />
-      </TaskProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider>
+        <TaskProvider>
+          <AppNavigator />
+        </TaskProvider>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }

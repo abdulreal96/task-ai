@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { Mic, ListTodo, BarChart3, Clock, CheckCircle2, TrendingUp } from 'lucide-react-native';
 
 export default function DashboardScreen({ navigation }: any) {
   const { tasks } = useTasks();
   const { colors, isDarkMode } = useTheme();
+  const { user } = useAuth();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -19,7 +21,7 @@ export default function DashboardScreen({ navigation }: any) {
   });
   
   const completedToday = todayTasks.filter((t: Task) => t.status === 'completed').length;
-  const totalTimeToday = todayTasks.reduce((acc: number, t: Task) => acc + t.timeLogged, 0);
+  const totalTimeToday = todayTasks.reduce((acc: number, t: Task) => acc + t.timeSpent, 0);
   const inProgressTasks = tasks.filter((t: Task) => t.status === 'in-progress');
   
   const formatTime = (minutes: number) => {
@@ -38,7 +40,7 @@ export default function DashboardScreen({ navigation }: any) {
         {/* Blue Header with Gradient */}
         <View style={[styles.blueHeader, { backgroundColor: colors.primary }]}>
           <View style={styles.headerContent}>
-            <Text style={styles.greeting}>Hello, Abdulwahab 👋</Text>
+            <Text style={styles.greeting}>Hello, {user?.fullName || 'User'} 👋</Text>
             <Text style={styles.subGreeting}>Let's make today productive</Text>
           </View>
         </View>
@@ -78,7 +80,7 @@ export default function DashboardScreen({ navigation }: any) {
           <View style={styles.quickActionsGrid}>
             <TouchableOpacity 
               style={[styles.quickActionButton, styles.quickActionPrimary, { backgroundColor: colors.primary }]}
-              onPress={() => navigation.navigate('RecordTask')}
+              onPress={() => navigation.navigate('Record')}
             >
               <Mic color="#ffffff" size={32} />
               <Text style={styles.quickActionTextPrimary}>Record Task</Text>
@@ -86,7 +88,7 @@ export default function DashboardScreen({ navigation }: any) {
             
             <TouchableOpacity 
               style={[styles.quickActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => navigation.navigate('TaskBoard')}
+              onPress={() => navigation.navigate('Tasks')}
             >
               <ListTodo color={colors.text} size={32} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>View Tasks</Text>
@@ -102,7 +104,7 @@ export default function DashboardScreen({ navigation }: any) {
             
             <TouchableOpacity 
               style={styles.quickActionButton}
-              onPress={() => navigation.navigate('TaskBoard')}
+              onPress={() => navigation.navigate('Tasks')}
             >
               <TrendingUp color="#000000" size={32} />
               <Text style={styles.quickActionText}>Tags</Text>
@@ -128,10 +130,10 @@ export default function DashboardScreen({ navigation }: any) {
                         <Text style={[styles.taskTagText, { color: isDarkMode ? '#93c5fd' : '#1e40af' }]}>{tag}</Text>
                       </View>
                     ))}
-                    {task.timeLogged > 0 && (
+                    {task.timeSpent > 0 && (
                       <View style={styles.taskTime}>
-                        <Clock color={colors.textSecondary} size={12} />
-                        <Text style={[styles.taskTimeText, { color: colors.textSecondary }]}>{formatTime(task.timeLogged)}</Text>
+                        <Clock size={12} color={colors.textSecondary} />
+                        <Text style={[styles.taskTimeText, { color: colors.textSecondary }]}>{formatTime(task.timeSpent)}</Text>
                       </View>
                     )}
                   </View>

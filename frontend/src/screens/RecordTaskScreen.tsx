@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Mic, X, Check } from 'lucide-react-native';
+import { Mic, X, Check, Edit3, Send } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,10 @@ export default function RecordTaskScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // For now, we'll simulate voice input with a text box
+  // Real voice recording would need expo-av + backend transcription
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -58,24 +62,18 @@ export default function RecordTaskScreen() {
         ).start();
       });
 
-      // Simulate live transcription
-      simulateTranscription();
+      // Simulate typing (placeholder for real speech recognition)
+      simulateTyping();
     }
   }, [isRecording]);
 
-  const simulateTranscription = () => {
-    const phrases = [
-      'I need to implement the wallet balance feature for the transporter module',
-      'Fix the authentication bug on mobile devices',
-      'Design a new user dashboard with analytics'
-    ];
-    
-    const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+  const simulateTyping = () => {
+    const sampleText = "I need to implement the wallet balance feature for the transporter module";
     let currentIndex = 0;
     
     const interval = setInterval(() => {
-      if (currentIndex < randomPhrase.length) {
-        setTranscript(randomPhrase.slice(0, currentIndex + 1));
+      if (currentIndex < sampleText.length && isRecording) {
+        setTranscript(sampleText.slice(0, currentIndex + 1));
         currentIndex++;
       } else {
         clearInterval(interval);
@@ -84,15 +82,26 @@ export default function RecordTaskScreen() {
   };
 
   const startRecording = () => {
-    setIsRecording(true);
     setTranscript('');
+    setIsRecording(true);
+    // In production, this would start audio recording
   };
 
   const stopRecording = () => {
     setIsRecording(false);
+    
     if (transcript.trim()) {
-      processTranscript();
+      setIsEditing(true);
     }
+  };
+
+  const handleSendToAI = () => {
+    if (!transcript.trim()) {
+      Alert.alert('Error', 'Please record or type something first');
+      return;
+    }
+    setIsEditing(false);
+    processTranscript();
   };
 
   const processTranscript = () => {
@@ -144,31 +153,28 @@ export default function RecordTaskScreen() {
     return tags.length > 0 ? tags : ['general'];
   };
 
-  const confirmTasks = () => {
-    extractedTasks.forEach(taskData => {
-      addTask({
-        title: taskData.title,
-        description: taskData.description,
-        tags: taskData.tags,
-        status: 'todo',
-        timeLogged: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        activities: [
-          {
-            id: `a${Date.now()}`,
-            type: 'created',
-            description: 'Task created via voice',
-            timestamp: new Date()
-          }
-        ]
-      });
-    });
-    
-    // Reset
-    setTranscript('');
-    setExtractedTasks([]);
-    setShowConfirmation(false);
+  const confirmTasks = async () => {
+    try {
+      for (const taskData of extractedTasks) {
+        await addTask({
+          title: taskData.title,
+          description: taskData.description,
+          tags: taskData.tags,
+          status: 'todo',
+          priority: 'medium',
+          timeSpent: 0,
+          timerStatus: 'stopped',
+        });
+      }
+      
+      // Reset
+      setTranscript('');
+      setExtractedTasks([]);
+      setShowConfirmation(false);
+      Alert.alert('Success', 'Tasks saved successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save tasks. Please try again.');
+    }
   };
 
   return (
@@ -228,19 +234,66 @@ export default function RecordTaskScreen() {
 
             {/* Live Transcript */}
             {transcript && (
-              <View style={styles.transcriptCard}>
-                <Text style={styles.transcriptText}>{transcript}</Text>
+              <View style={[styles.transcriptCard, { backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb' }]}>
+                {isEditing ? (
+                  <ScrollView style={styles.editContainer}>
+                    <TextInput
+                      style={[styles.transcriptInput, { color: isDarkMode ? '#f9fafb' : '#111827' }]}
+                      value={transcript}
+                      onChangeText={setTranscript}
+                      multiline
+                      placeholder="Edit your transcript here..."
+                      placeholderTextColor={isDarkMode ? '#9ca3af' : '#6b7280'}
+                      autoFocus
+                    />
+                  </ScrollView>
+                ) : (
+                  <Text style={[styles.transcriptText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>
+                    {transcript}
+                  </Text>
+                )}
               </View>
             )}
 
-            {/* Process Button */}
+            {/* Action Buttons */}
             {transcript && !isRecording && (
-              <TouchableOpacity 
-                style={[styles.processButton, { backgroundColor: isDarkMode ? '#f3f4f6' : '#ffffff' }]} 
-                onPress={processTranscript}
-              >
-                <Text style={styles.processButtonText}>Process Task</Text>
-              </TouchableOpacity>
+              <View style={styles.buttonContainer}>
+                {!isEditing ? (
+                  <>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }]} 
+                      onPress={() => setIsEditing(true)}
+                    >
+                      <Edit3 size={18} color={isDarkMode ? '#f9fafb' : '#111827'} />
+                      <Text style={[styles.actionButtonText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.sendButton]} 
+                      onPress={handleSendToAI}
+                    >
+                      <Send size={18} color="#fff" />
+                      <Text style={styles.sendButtonText}>Send to AI</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.cancelButton, { backgroundColor: isDarkMode ? '#374151' : '#e5e7eb' }]} 
+                      onPress={() => setIsEditing(false)}
+                    >
+                      <X size={18} color={isDarkMode ? '#f9fafb' : '#111827'} />
+                      <Text style={[styles.actionButtonText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.sendButton]} 
+                      onPress={handleSendToAI}
+                    >
+                      <Send size={18} color="#fff" />
+                      <Text style={styles.sendButtonText}>Send to AI</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             )}
           </>
         )}
@@ -249,8 +302,8 @@ export default function RecordTaskScreen() {
         {isProcessing && (
           <View style={styles.processingContainer}>
             <View style={styles.spinner} />
-            <Text style={styles.processingText}>Processing with AI...</Text>
-            <Text style={styles.processingSubText}>Extracting tasks and tags</Text>
+            <Text style={[styles.processingText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Processing with AI...</Text>
+            <Text style={[styles.processingSubText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Extracting tasks and tags</Text>
           </View>
         )}
 
@@ -382,15 +435,57 @@ const styles = StyleSheet.create({
   },
   transcriptCard: {
     marginTop: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     padding: 16,
     maxWidth: 400,
+    maxHeight: 300,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   transcriptText: {
     fontSize: 14,
+  },
+  editContainer: {
+    maxHeight: 250,
+  },
+  transcriptInput: {
+    fontSize: 14,
+    lineHeight: 20,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 8,
+    gap: 8,
+  },
+  editButton: {
+    // backgroundColor set dynamically
+  },
+  sendButton: {
+    backgroundColor: '#2563eb',
+  },
+  cancelButton: {
+    // backgroundColor set dynamically
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  sendButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
     color: '#ffffff',
   },
   processButton: {

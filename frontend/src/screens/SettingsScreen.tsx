@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, StatusBar, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, Mic, Palette, Download, Info, ChevronRight, Check, X } from 'lucide-react-native';
+import { Bell, Mic, Palette, Download, Info, ChevronRight, Check, X, LogOut } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useCustomAlert } from '../hooks/useCustomAlert';
+import CustomAlert from '../components/CustomAlert';
 
 export default function SettingsScreen() {
   const { isDarkMode, colorScheme, toggleDarkMode, setColorScheme, colors } = useTheme();
+  const { logout, user } = useAuth();
+  const { alertConfig, showAlert, hideAlert } = useCustomAlert();
   const [autoConfirm, setAutoConfirm] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState(false);
   const [dailySummary, setDailySummary] = useState(true);
@@ -13,6 +18,25 @@ export default function SettingsScreen() {
   const [taskReminders, setTaskReminders] = useState(true);
   const [aiInsights, setAiInsights] = useState(true);
   const [showColorPicker, setShowColorPicker] = useState(false);
+
+  const handleLogout = () => {
+    showAlert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel', onPress: hideAlert },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: () => {
+            hideAlert();
+            logout();
+          }
+        }
+      ],
+      'warning'
+    );
+  };
 
   const colorSchemes = [
     { name: 'Blue', value: 'blue' as const, color: '#2563eb' },
@@ -196,6 +220,31 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Account */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Info size={20} color={colors.text} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
+          </View>
+          <View style={[styles.card, { backgroundColor: colors.surface }]}>
+            <View style={[styles.settingItem, styles.settingItemBorder, { borderBottomColor: colors.border }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: colors.text }]}>Email</Text>
+                <Text style={[styles.settingDescription, { color: colors.textSecondary }]}>{user?.email || 'Not logged in'}</Text>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={handleLogout}
+            >
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: '#ef4444' }]}>Logout</Text>
+              </View>
+              <LogOut size={20} color="#ef4444" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* About */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -224,11 +273,6 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         </View>
-
-        {/* Sign Out */}
-        <TouchableOpacity style={[styles.signOutButton, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.signOutText, { color: colors.text }]}>Sign Out</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Color Picker Modal */}
@@ -267,6 +311,16 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Alert */}
+      <CustomAlert
+        visible={alertConfig.visible}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        buttons={alertConfig.buttons}
+        onClose={hideAlert}
+      />
     </SafeAreaView>
   );
 }

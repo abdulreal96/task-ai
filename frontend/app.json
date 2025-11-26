@@ -14,13 +14,20 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.taskaimanager.app"
+      "bundleIdentifier": "com.taskaimanager.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "This app needs access to speech recognition to convert your voice to text for creating tasks.",
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record audio for task creation."
+      }
     },
     "android": {
       "package": "com.taskaimanager.app",
       "adaptiveIcon": {
         "backgroundColor": "#6366f1"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro"
