@@ -5,6 +5,12 @@ import { Mic, X, Check, Edit3, Send } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import Constants from 'expo-constants';
+import {
+  useSpeechRecognitionEvent,
+  ExpoSpeechRecognitionModule,
+  AudioEncodingAndroid,
+} from "expo-speech-recognition";
 
 export default function RecordTaskScreen() {
   const { addTask } = useTasks();
@@ -15,15 +21,33 @@ export default function RecordTaskScreen() {
   const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-
-  // For now, we'll simulate voice input with a text box
-  // Real voice recording would need expo-av + backend transcription
+  const [recognitionError, setRecognitionError] = useState<string | null>(null);
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const waveAnimations = useRef(
     Array.from({ length: 20 }, () => new Animated.Value(10))
   ).current;
+
+  // Live speech recognition event listener
+  useSpeechRecognitionEvent("result", (event) => {
+    // Update transcript with live results as you speak
+    const liveTranscript = event.results
+      .map((result) => result.transcript)
+      .join(" ");
+    setTranscript(liveTranscript);
+  });
+
+  useSpeechRecognitionEvent("error", (event) => {
+    console.error("Speech recognition error:", event);
+    setRecognitionError(event.error);
+    setIsRecording(false);
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    // Speech recognition ended
+    setIsRecording(false);
+  });
 
   useEffect(() => {
     if (isRecording) {
@@ -61,37 +85,60 @@ export default function RecordTaskScreen() {
           ])
         ).start();
       });
-
-      // Simulate typing (placeholder for real speech recognition)
-      simulateTyping();
+    } else {
+      // Stop animations
+      pulseAnim.stopAnimation();
+      waveAnimations.forEach((anim) => anim.stopAnimation());
     }
   }, [isRecording]);
 
-  const simulateTyping = () => {
-    const sampleText = "I need to implement the wallet balance feature for the transporter module";
-    let currentIndex = 0;
-    
-    const interval = setInterval(() => {
-      if (currentIndex < sampleText.length && isRecording) {
-        setTranscript(sampleText.slice(0, currentIndex + 1));
-        currentIndex++;
-      } else {
-        clearInterval(interval);
+  const startRecording = async () => {
+    try {
+      setTranscript('');
+      setRecognitionError(null);
+      
+      // Request permissions
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
+        Alert.alert("Permission Required", "Please grant microphone permission to use voice recording.");
+        return;
       }
-    }, 50);
+
+      // Start live speech recognition
+      await ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true, // Get live results as you speak
+        maxAlternatives: 1,
+        continuous: true, // Keep listening until stopped
+        requiresOnDeviceRecognition: false,
+        addsPunctuation: true,
+        contextualStrings: ["task", "todo", "implement", "fix", "bug", "feature"],
+        // Android-specific options
+        androidRecognitionServicePackage: "com.google.android.googlequicksearchbox",
+        androidIntentOptions: {
+          EXTRA_LANGUAGE_MODEL: "free_form",
+          EXTRA_PARTIAL_RESULTS: true,
+        },
+      });
+
+      setIsRecording(true);
+    } catch (error: any) {
+      console.error("Failed to start recording:", error);
+      Alert.alert("Error", "Failed to start speech recognition: " + error.message);
+    }
   };
 
-  const startRecording = () => {
-    setTranscript('');
-    setIsRecording(true);
-    // In production, this would start audio recording
-  };
-
-  const stopRecording = () => {
-    setIsRecording(false);
-    
-    if (transcript.trim()) {
-      setIsEditing(true);
+  const stopRecording = async () => {
+    try {
+      await ExpoSpeechRecognitionModule.stop();
+      setIsRecording(false);
+      
+      if (transcript.trim()) {
+        setIsEditing(true);
+      }
+    } catch (error: any) {
+      console.error("Failed to stop recording:", error);
+      setIsRecording(false);
     }
   };
 
@@ -101,7 +148,62 @@ export default function RecordTaskScreen() {
       return;
     }
     setIsEditing(false);
-    processTranscript();
+    processTranscriptWithAI();
+  };
+
+  const processTranscriptWithAI = async () => {
+    setIsProcessing(true);
+    
+    try {
+      // Call the real AI backend endpoint
+      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://194.163.150.173:3000';
+      const response = await fetch(`${API_URL}/ai/extract-tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await getAuthToken()}`,
+        },
+        body: JSON.stringify({
+          transcript: transcript,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.tasks && data.tasks.length > 0) {
+        // AI successfully extracted tasks
+        setExtractedTasks(data.tasks);
+        setIsProcessing(false);
+        setShowConfirmation(true);
+      } else {
+        // AI failed or returned no tasks - use fallback
+        const fallbackTasks = extractTasksFromTranscript(transcript);
+        setExtractedTasks(fallbackTasks);
+        setIsProcessing(false);
+        setShowConfirmation(true);
+        
+        if (!data.success) {
+          Alert.alert('AI Processing', 'Using fallback task extraction. ' + (data.message || ''));
+        }
+      }
+    } catch (error: any) {
+      console.error('AI extraction failed:', error);
+      // Network error or API failure - use local fallback
+      const fallbackTasks = extractTasksFromTranscript(transcript);
+      setExtractedTasks(fallbackTasks);
+      setIsProcessing(false);
+      setShowConfirmation(true);
+      Alert.alert('Network Error', 'Could not reach AI server. Using basic extraction.');
+    }
+  };
+
+  const getAuthToken = async () => {
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      return await AsyncStorage.getItem('accessToken');
+    } catch (error) {
+      return null;
+    }
   };
 
   const processTranscript = () => {
@@ -116,10 +218,12 @@ export default function RecordTaskScreen() {
   };
 
   const extractTasksFromTranscript = (text: string): any[] => {
+    // Fallback method when AI is unavailable
     return [
       {
         title: text.slice(0, 50) + (text.length > 50 ? '...' : ''),
         description: text,
+        priority: 'medium',
         tags: extractTags(text)
       }
     ];
@@ -155,13 +259,15 @@ export default function RecordTaskScreen() {
 
   const confirmTasks = async () => {
     try {
+      // Save all extracted tasks (can be multiple from AI)
       for (const taskData of extractedTasks) {
         await addTask({
           title: taskData.title,
           description: taskData.description,
-          tags: taskData.tags,
+          tags: taskData.tags || [],
           status: 'todo',
-          priority: 'medium',
+          priority: taskData.priority || 'medium', // Use AI-detected priority
+          dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
           timeSpent: 0,
           timerStatus: 'stopped',
         });
@@ -171,7 +277,7 @@ export default function RecordTaskScreen() {
       setTranscript('');
       setExtractedTasks([]);
       setShowConfirmation(false);
-      Alert.alert('Success', 'Tasks saved successfully');
+      Alert.alert('Success', `${extractedTasks.length} task(s) saved successfully`);
     } catch (error) {
       Alert.alert('Error', 'Failed to save tasks. Please try again.');
     }
@@ -321,9 +427,32 @@ export default function RecordTaskScreen() {
 
             {extractedTasks.map((task, index) => (
               <View key={index} style={styles.extractedTask}>
-                <Text style={styles.extractedTaskTitle}>{task.title}</Text>
+                <View style={styles.extractedTaskHeader}>
+                  <Text style={styles.extractedTaskTitle}>{task.title}</Text>
+                  {task.priority && (
+                    <View style={[
+                      styles.priorityBadge,
+                      task.priority === 'urgent' && styles.priorityUrgent,
+                      task.priority === 'high' && styles.priorityHigh,
+                      task.priority === 'medium' && styles.priorityMedium,
+                      task.priority === 'low' && styles.priorityLow,
+                    ]}>
+                      <Text style={styles.priorityText}>{task.priority}</Text>
+                    </View>
+                  )}
+                </View>
+                {task.description && task.description !== task.title && (
+                  <Text style={styles.extractedTaskDescription} numberOfLines={2}>
+                    {task.description}
+                  </Text>
+                )}
+                {task.dueDate && (
+                  <Text style={styles.extractedTaskDueDate}>
+                    Due: {new Date(task.dueDate).toLocaleDateString()}
+                  </Text>
+                )}
                 <View style={styles.extractedTaskTags}>
-                  {task.tags.map((tag: string) => (
+                  {task.tags && task.tags.map((tag: string) => (
                     <View key={tag} style={styles.extractedTag}>
                       <Text style={styles.extractedTagText}>{tag}</Text>
                     </View>
@@ -554,11 +683,53 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
+  extractedTaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   extractedTaskTitle: {
     fontSize: 16,
     fontWeight: '500',
     color: '#111827',
+    flex: 1,
+    marginRight: 8,
+  },
+  extractedTaskDescription: {
+    fontSize: 14,
+    color: '#6b7280',
     marginBottom: 8,
+    lineHeight: 20,
+  },
+  extractedTaskDueDate: {
+    fontSize: 12,
+    color: '#8b5cf6',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  priorityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  priorityUrgent: {
+    backgroundColor: '#fee2e2',
+  },
+  priorityHigh: {
+    backgroundColor: '#fed7aa',
+  },
+  priorityMedium: {
+    backgroundColor: '#fef3c7',
+  },
+  priorityLow: {
+    backgroundColor: '#dbeafe',
+  },
+  priorityText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+    color: '#111827',
   },
   extractedTaskTags: {
     flexDirection: 'row',

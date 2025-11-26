@@ -12,12 +12,24 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to record audio for task creation.",
+          "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to use speech recognition to convert your voice to text.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.taskaimanager.app",
       "infoPlist": {
-        "NSSpeechRecognitionUsageDescription": "This app needs access to speech recognition to convert your voice to text for creating tasks.",
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record audio for task creation."
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition to convert your voice to text.",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record audio for task creation."
       }
     },
     "android": {
@@ -26,11 +38,20 @@
         "backgroundColor": "#6366f1"
       },
       "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET"
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6454eaff-2890-4bd2-9528-fba2a241d859"
+      },
+      "apiUrl": "http://194.163.150.173:3000"
+    }
     }
   }
 }

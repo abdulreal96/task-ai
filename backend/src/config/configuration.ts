@@ -13,9 +13,14 @@ export default () => ({
     refreshExpiresIn: process.env.REFRESH_TOKEN_EXPIRATION || '7d',
   },
   
+  // AI Configuration
+  agentUrl: process.env.AI_AGENT_URL || 'http://194.163.150.173:11434/api/generate',
+  agentModel: process.env.AI_AGENT_MODEL || 'qwen2.5:0.5b-instruct',
+  agentApiKey: process.env.AI_AGENT_API_KEY || '',
+  
   ai: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
-    agentUrl: process.env.AI_AGENT_URL || '',
+    agentUrl: process.env.AI_AGENT_URL || 'http://194.163.150.173:11434/api/generate',
     agentModel: process.env.AI_AGENT_MODEL || 'qwen2.5:0.5b-instruct',
     agentApiKey: process.env.AI_AGENT_API_KEY || '',
   },

@@ -1,9 +1,9 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// Use your computer's local IP address so Android device can reach the backend
-// Change this if your IP address changes
-const API_URL = 'http://10.222.100.104:3000';
+// Backend server IP address - configurable via app.json
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://194.163.150.173:3000';
 
 const api = axios.create({
   baseURL: API_URL,
