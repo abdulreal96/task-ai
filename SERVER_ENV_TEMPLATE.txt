@@ -1,0 +1,24 @@
+# Copy this file to your server at: /task-app/task-ai/backend/.env
+# Then replace all values with your actual configuration
+
+# Application Configuration
+NODE_ENV=production
+PORT=3000
+
+# Database
+MONGODB_URI=mongodb://localhost:27017/task-ai
+
+# JWT Configuration
+JWT_SECRET=your_very_secure_jwt_secret_key_min_32_chars
+REFRESH_TOKEN_SECRET=your_very_secure_refresh_secret_key_min_32_chars
+JWT_EXPIRATION=15m
+REFRESH_TOKEN_EXPIRATION=7d
+
+# AI Configuration
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxx
+AI_AGENT_URL=http://localhost:11434
+AI_AGENT_MODEL=qwen2.5:0.5b-instruct
+AI_AGENT_API_KEY=
+
+# CORS
+CORS_ORIGIN=*

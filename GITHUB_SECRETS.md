@@ -6,7 +6,7 @@ Add these secrets to your GitHub repository:
 
 ---
 
-## Server Connection Secrets
+## Server Connection Secrets (Only These Need to be in GitHub)
 
 ### SERVER_HOST
 Your Ubuntu server IP address or domain
@@ -28,7 +28,62 @@ Your server SSH password
 
 ---
 
-## Application Environment Variables
+## Application Environment Variables (Create .env file on server)
+
+**⚠️ DO NOT add these to GitHub Secrets**
+
+Create a file at `/task-app/task-ai/backend/.env` on your server with these values:
+
+```bash
+# Application Configuration
+NODE_ENV=production
+PORT=3000
+
+# Database
+MONGODB_URI=mongodb://localhost:27017/task-ai
+
+# JWT Configuration
+JWT_SECRET=your_very_secure_jwt_secret_key_min_32_chars
+REFRESH_TOKEN_SECRET=your_very_secure_refresh_secret_key_min_32_chars
+JWT_EXPIRATION=15m
+REFRESH_TOKEN_EXPIRATION=7d
+
+# AI Configuration
+OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxxxxxxxxxx
+AI_AGENT_URL=http://localhost:11434
+AI_AGENT_MODEL=qwen2.5:0.5b-instruct
+AI_AGENT_API_KEY=
+
+# CORS
+CORS_ORIGIN=*
+```
+
+### How to create the .env file on your server:
+
+```bash
+# SSH into your server
+ssh root@your-server-ip
+
+# Navigate to backend directory
+cd /task-app/task-ai/backend
+
+# Create .env file
+nano .env
+
+# Paste the above environment variables
+# Update with your actual values
+# Save with Ctrl+O, Enter, then Ctrl+X
+```
+
+---
+
+## Total GitHub Secrets Needed: 3 (Only Server Access)
+
+1. ✓ SERVER_HOST
+2. ✓ SERVER_USERNAME
+3. ✓ SERVER_PASSWORD
+
+**All application secrets are now in the .env file on the server!**
 
 ### MONGODB_URI
 Your MongoDB connection string
@@ -132,12 +187,23 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 
 ## Deployment Flow
 
-1. Push code to `main` branch
-2. GitHub Actions triggers automatically
-3. Connects to your server via SSH
-4. Pulls latest code from GitHub
-5. Builds Docker image on server
-6. Stops old container
-7. Starts new container with updated code
+1. Create `.env` file on your server at `/task-app/task-ai/backend/.env`
+2. Add only 3 GitHub Secrets (SERVER_HOST, SERVER_USERNAME, SERVER_PASSWORD)
+3. Push code to `main` branch
+4. GitHub Actions triggers automatically
+5. Connects to your server via SSH
+6. Pulls latest code from GitHub
+7. Builds Docker image on server
+8. Stops old container
+9. Starts new container with `.env` file
 
 Your backend will be accessible at: `http://your-server-ip:3000`
+
+---
+
+## Security Benefits
+
+✅ Secrets never leave your server
+✅ No secrets stored in GitHub
+✅ Easy to update secrets (just edit .env file on server)
+✅ No need to redeploy when changing secrets
