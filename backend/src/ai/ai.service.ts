@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
-interface ExtractedTask {
+export interface ExtractedTask {
   title: string;
   description: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
@@ -10,7 +10,7 @@ interface ExtractedTask {
   dueDate?: string;
 }
 
-interface TaskExtractionResponse {
+export interface TaskExtractionResponse {
   tasks: ExtractedTask[];
 }
 
@@ -21,7 +21,7 @@ export class AiService {
   private readonly aiAgentModel: string;
 
   constructor(private configService: ConfigService) {
-    this.aiAgentUrl = this.configService.get<string>('agentUrl');
+    this.aiAgentUrl = this.configService.get<string>('agentUrl') || 'http://194.163.150.173:11434/api/generate';
     this.aiAgentModel = this.configService.get<string>('agentModel') || 'qwen2.5:0.5b-instruct';
   }
 

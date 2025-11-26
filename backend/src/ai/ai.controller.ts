@@ -1,6 +1,6 @@
 import { Controller, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AiService } from './ai.service';
+import { AiService, ExtractedTask } from './ai.service';
 
 class ExtractTasksDto {
   transcript: string;
@@ -13,7 +13,12 @@ export class AiController {
 
   @Post('extract-tasks')
   @HttpCode(HttpStatus.OK)
-  async extractTasks(@Body() extractTasksDto: ExtractTasksDto, @Request() req) {
+  async extractTasks(@Body() extractTasksDto: ExtractTasksDto, @Request() req): Promise<{
+    success: boolean;
+    message: string;
+    tasks: ExtractedTask[];
+    error?: string;
+  }> {
     const { transcript } = extractTasksDto;
     
     if (!transcript || transcript.trim().length === 0) {
