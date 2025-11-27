@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mic, X, Check, Edit3, Send } from 'lucide-react-native';
@@ -13,6 +13,7 @@ export default function RecordTaskScreen() {
   const { colors, isDarkMode } = useTheme();
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -29,6 +30,21 @@ export default function RecordTaskScreen() {
   const [isInClarificationMode, setIsInClarificationMode] = useState(false);
   const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'ai', content: string}>>([]);
+      setTranscript('');
+      setInterimTranscript('');
+  const joinTranscriptParts = useCallback((...parts: string[]) => {
+    return parts
+      .filter((part) => !!part && part.trim().length > 0)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }, []);
+
+  const displayedTranscript = useMemo(() => {
+    return joinTranscriptParts(transcript, isRecording ? interimTranscript : '');
+  }, [interimTranscript, isRecording, joinTranscriptParts, transcript]);
+
+  const hasTranscriptContent = displayedTranscript.length > 0;
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -139,30 +155,26 @@ export default function RecordTaskScreen() {
   };
 
   const handleResultEvent = useCallback((event: any) => {
-    if (!event?.results) {
+    if (!event?.results || !Array.isArray(event.results) || event.results.length === 0) {
       return;
     }
 
-    const newText = event.results
-      .map((result: any) => result.transcript)
-      .join(" ");
-    
-    // Accumulate transcript instead of replacing it
-    // Only add new text if it's not empty and different from what we have
-    if (newText.trim()) {
-      setTranscript((prev) => {
-        // If this is a final result, append with space
-        // If it's interim, we might be getting partial updates
-        const isFinal = event.isFinal;
-        if (isFinal && !prev.includes(newText.trim())) {
-          return prev ? `${prev} ${newText}`.trim() : newText;
-        }
-        // For interim results, show the current sentence being spoken
-        // but preserve everything that came before
-        return prev ? `${prev} ${newText}`.trim() : newText;
-      });
+    const latestResult = event.results[event.results.length - 1];
+    const latestTranscript = latestResult?.transcript?.trim();
+    const isFinalResult = latestResult?.isFinal ?? event?.isFinal ?? false;
+
+    if (!latestTranscript) {
+      setInterimTranscript('');
+      return;
     }
-  }, []);
+
+    if (isFinalResult) {
+      setTranscript((prev) => joinTranscriptParts(prev, latestTranscript));
+      setInterimTranscript('');
+    } else {
+      setInterimTranscript(latestTranscript);
+    }
+  }, [joinTranscriptParts]);
 
   const handleErrorEvent = useCallback((event: any) => {
     if (!event) {
@@ -187,7 +199,9 @@ export default function RecordTaskScreen() {
 
   const handleEndEvent = useCallback(() => {
     setIsRecording(false);
-  }, []);
+    setTranscript((prev) => joinTranscriptParts(prev, interimTranscript));
+    setInterimTranscript('');
+  }, [interimTranscript, joinTranscriptParts]);
 
   useEffect(() => {
     if (
@@ -282,6 +296,7 @@ export default function RecordTaskScreen() {
       }
 
       setTranscript('');
+      setInterimTranscript('');
       setRecognitionError(null);
       
       // Check permission first
@@ -350,6 +365,8 @@ export default function RecordTaskScreen() {
         await ExpoSpeechRecognitionModule.stop();
       }
       setIsRecording(false);
+      setTranscript((prev) => joinTranscriptParts(prev, interimTranscript));
+      setInterimTranscript('');
       
       if (transcript.trim()) {
         setIsEditing(true);
@@ -361,15 +378,24 @@ export default function RecordTaskScreen() {
   };
 
   const handleSendToAI = () => {
-    if (!transcript.trim()) {
+    const finalizedTranscript = joinTranscriptParts(transcript, interimTranscript);
+    if (!finalizedTranscript) {
       Alert.alert('Error', 'Please record or type something first');
       return;
     }
+    setTranscript(finalizedTranscript);
+    setInterimTranscript('');
     setIsEditing(false);
-    processTranscriptWithAI();
+    processTranscriptWithAI(finalizedTranscript);
   };
 
-  const processTranscriptWithAI = async () => {
+  const processTranscriptWithAI = async (inputTranscript?: string) => {
+    const transcriptToProcess = (inputTranscript ?? transcript).trim();
+    if (!transcriptToProcess) {
+      Alert.alert('Error', 'Transcript is empty. Please record again.');
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
@@ -381,9 +407,9 @@ export default function RecordTaskScreen() {
       const conversationContext = isInClarificationMode 
         ? [
             ...conversationHistory,
-            { role: 'user' as const, content: transcript }
+            { role: 'user' as const, content: transcriptToProcess }
           ]
-        : [{ role: 'user' as const, content: transcript }];
+        : [{ role: 'user' as const, content: transcriptToProcess }];
       
       const response = await fetch(`${API_URL}/ai/extract-tasks`, {
         method: 'POST',
@@ -392,25 +418,30 @@ export default function RecordTaskScreen() {
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
         },
         body: JSON.stringify({ 
-          transcript: transcript,
+          transcript: transcriptToProcess,
           conversationHistory: conversationContext
         }),
       });
 
       const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.message || 'AI service returned an error');
+      }
+
       // Check if AI needs clarification
       if (data.needsClarification && data.clarificationQuestion) {
         // AI is asking for more information
         setConversationHistory(prev => [
           ...prev,
-          { role: 'user', content: transcript },
+          { role: 'user', content: transcriptToProcess },
           { role: 'ai', content: data.clarificationQuestion }
         ]);
         setClarificationQuestion(data.clarificationQuestion);
         setIsInClarificationMode(true);
         setIsProcessing(false);
         setTranscript(''); // Clear for next input
+        setInterimTranscript('');
         Alert.alert('Need More Information', data.clarificationQuestion);
         return;
       }
@@ -426,7 +457,7 @@ export default function RecordTaskScreen() {
         setConversationHistory([]);
       } else {
         // AI failed or returned no tasks - use fallback
-        const fallbackTasks = extractTasksFromTranscript(transcript);
+        const fallbackTasks = extractTasksFromTranscript(transcriptToProcess);
         setExtractedTasks(fallbackTasks);
         setIsProcessing(false);
         setShowConfirmation(true);
@@ -441,7 +472,7 @@ export default function RecordTaskScreen() {
     } catch (error: any) {
       console.error('AI extraction failed:', error);
       // Network error or API failure - use local fallback
-      const fallbackTasks = extractTasksFromTranscript(transcript);
+      const fallbackTasks = extractTasksFromTranscript(transcriptToProcess);
       setExtractedTasks(fallbackTasks);
       setIsProcessing(false);
       setShowConfirmation(true);
@@ -533,6 +564,7 @@ export default function RecordTaskScreen() {
       
       // Reset
       setTranscript('');
+      setInterimTranscript('');
       setExtractedTasks([]);
       setShowConfirmation(false);
       Alert.alert('Success', `${extractedTasks.length} task(s) saved successfully`);
@@ -617,7 +649,7 @@ export default function RecordTaskScreen() {
             )}
 
             {/* Live Transcript */}
-            {transcript && (
+            {hasTranscriptContent && (
               <View style={[styles.transcriptCard, { backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb' }]}>
                 {isEditing ? (
                   <ScrollView style={styles.editContainer}>
@@ -633,7 +665,7 @@ export default function RecordTaskScreen() {
                   </ScrollView>
                 ) : (
                   <Text style={[styles.transcriptText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>
-                    {transcript}
+                    {displayedTranscript}
                   </Text>
                 )}
               </View>
@@ -745,6 +777,7 @@ export default function RecordTaskScreen() {
                 onPress={() => {
                   setShowConfirmation(false);
                   setTranscript('');
+                  setInterimTranscript('');
                 }}
               >
                 <Text style={styles.tryAgainButtonText}>Try Again</Text>

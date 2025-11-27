@@ -1,11 +1,7 @@
 import { Controller, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AiService, ExtractedTask } from './ai.service';
-
-class ExtractTasksDto {
-  transcript: string;
-  conversationHistory?: Array<{role: 'user' | 'ai', content: string}>;
-}
+import { ExtractTasksDto } from './dto/extract-tasks.dto';
 
 @Controller('ai')
 @UseGuards(JwtAuthGuard)
