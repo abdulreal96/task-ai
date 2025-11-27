@@ -55,12 +55,15 @@ export default function RecordTaskScreen() {
 
   const detectSpeechService = useCallback(async () => {
     if (!ExpoSpeechRecognitionModule || Platform.OS !== "android") {
+      console.log("[Speech] Skipping service detection (not Android or module unavailable)");
       return;
     }
 
     try {
       if (typeof ExpoSpeechRecognitionModule.getSpeechRecognitionServices === "function") {
         const services: string[] = await ExpoSpeechRecognitionModule.getSpeechRecognitionServices();
+        console.log("[Speech] Available services:", services);
+        
         if (Array.isArray(services) && services.length > 0) {
           const preferredPackages = [
             "com.google.android.googlequicksearchbox",
@@ -68,19 +71,29 @@ export default function RecordTaskScreen() {
             "com.samsung.android.bixby.agent",
           ];
           const preferred = preferredPackages.find((pkg) => services.includes(pkg));
-          setSpeechServicePackage(preferred ?? services[0]);
+          const selectedPackage = preferred ?? services[0];
+          console.log("[Speech] Selected service:", selectedPackage);
+          setSpeechServicePackage(selectedPackage);
           return;
         }
       }
 
       if (typeof ExpoSpeechRecognitionModule.getDefaultRecognitionService === "function") {
         const defaultService = await ExpoSpeechRecognitionModule.getDefaultRecognitionService();
+        console.log("[Speech] Default service:", defaultService);
         if (defaultService?.packageName) {
           setSpeechServicePackage(defaultService.packageName);
+          return;
         }
       }
+
+      console.warn("[Speech] No speech services found on device");
+      Alert.alert(
+        "Speech Service Required",
+        "No speech recognition service found. Please install 'Speech Services by Google' from the Play Store."
+      );
     } catch (error) {
-      console.warn("Speech service detection failed:", error);
+      console.error("[Speech] Service detection error:", error);
     }
   }, []);
 
@@ -127,10 +140,25 @@ export default function RecordTaskScreen() {
       return;
     }
 
-    const liveTranscript = event.results
+    const newText = event.results
       .map((result: any) => result.transcript)
       .join(" ");
-    setTranscript(liveTranscript);
+    
+    // Accumulate transcript instead of replacing it
+    // Only add new text if it's not empty and different from what we have
+    if (newText.trim()) {
+      setTranscript((prev) => {
+        // If this is a final result, append with space
+        // If it's interim, we might be getting partial updates
+        const isFinal = event.isFinal;
+        if (isFinal && !prev.includes(newText.trim())) {
+          return prev ? `${prev} ${newText}`.trim() : newText;
+        }
+        // For interim results, show the current sentence being spoken
+        // but preserve everything that came before
+        return prev ? `${prev} ${newText}`.trim() : newText;
+      });
+    }
   }, []);
 
   const handleErrorEvent = useCallback((event: any) => {
@@ -139,6 +167,15 @@ export default function RecordTaskScreen() {
     }
 
     console.error("Speech recognition error:", event);
+    const errorCode = event.error;
+    
+    // Ignore "client" errors that occur after successful stop
+    // These are harmless and happen when the recognizer cleans up
+    if (errorCode === "client" || errorCode === "aborted") {
+      console.log("[Speech] Ignoring harmless error:", errorCode);
+      return;
+    }
+
     const message = event.message || event.error || "Unknown error occurred";
     setRecognitionError(message);
     setIsRecording(false);
@@ -282,10 +319,16 @@ export default function RecordTaskScreen() {
         },
       };
 
+      // Only specify a service package if we successfully detected one
+      // If null/undefined, Android will use its default service
       if (Platform.OS === "android" && speechServicePackage) {
+        console.log("[Speech] Using service:", speechServicePackage);
         recognitionOptions.androidRecognitionServicePackage = speechServicePackage;
+      } else if (Platform.OS === "android") {
+        console.log("[Speech] No specific service selected, using system default");
       }
 
+      console.log("[Speech] Starting recognition with options:", recognitionOptions);
       await ExpoSpeechRecognitionModule.start(recognitionOptions);
 
       setIsRecording(true);
@@ -329,15 +372,15 @@ export default function RecordTaskScreen() {
     try {
       // Call the real AI backend endpoint
       const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://task-ai.ilimtutor.com';
+      const authToken = await getAuthToken();
+      
       const response = await fetch(`${API_URL}/ai/extract-tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await getAuthToken()}`,
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify({
-          transcript: transcript,
-        }),
+        body: JSON.stringify({ transcript: transcript }),
       });
 
       const data = await response.json();
@@ -433,16 +476,19 @@ export default function RecordTaskScreen() {
     try {
       // Save all extracted tasks (can be multiple from AI)
       for (const taskData of extractedTasks) {
-        await addTask({
-          title: taskData.title,
-          description: taskData.description,
-          tags: taskData.tags || [],
-          status: 'todo',
-          priority: taskData.priority || 'medium', // Use AI-detected priority
+        // Ensure all required fields are present with proper defaults
+        const taskToSave = {
+          title: taskData.title || 'Untitled Task',
+          description: taskData.description || taskData.title || '',
+          tags: Array.isArray(taskData.tags) ? taskData.tags : ['general'],
+          status: 'todo' as const,
+          priority: (taskData.priority || 'medium') as 'low' | 'medium' | 'high' | 'urgent',
           dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
           timeSpent: 0,
-          timerStatus: 'stopped',
-        });
+          timerStatus: 'stopped' as const,
+        };
+        
+        await addTask(taskToSave);
       }
       
       // Reset
@@ -450,8 +496,9 @@ export default function RecordTaskScreen() {
       setExtractedTasks([]);
       setShowConfirmation(false);
       Alert.alert('Success', `${extractedTasks.length} task(s) saved successfully`);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save tasks. Please try again.');
+    } catch (error: any) {
+      console.error('Failed to save tasks:', error);
+      Alert.alert('Error', `Failed to save tasks: ${error.message || 'Please try again.'}`);
     }
   };
 
@@ -501,11 +548,11 @@ export default function RecordTaskScreen() {
 
             {/* Instructions */}
             <Text style={styles.mainText}>
-              {isRecording ? 'Listening...' : 'Tap to speak'}
+              {isRecording ? 'Recording...' : 'Tap to speak'}
             </Text>
             <Text style={styles.subText}>
               {isRecording 
-                ? 'Speak naturally about your tasks' 
+                ? 'Tap the button to stop recording' 
                 : 'Tell me what you need to do and I\'ll organize it for you'
               }
             </Text>
