@@ -8,6 +8,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 
+type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
+
+type TaskStatus = 'todo' | 'in-progress' | 'completed';
+
+type EditableExtractedTask = {
+  title: string;
+  description: string;
+  priority: PriorityLevel;
+  tags: string[];
+  dueDate: string;
+  status: TaskStatus;
+};
+
+const PRIORITY_OPTIONS: PriorityLevel[] = ['low', 'medium', 'high', 'urgent'];
+const STATUS_OPTIONS: TaskStatus[] = ['todo', 'in-progress', 'completed'];
+
 export default function RecordTaskScreen() {
   const { addTask } = useTasks();
   const { colors, isDarkMode } = useTheme();
@@ -15,7 +31,7 @@ export default function RecordTaskScreen() {
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [extractedTasks, setExtractedTasks] = useState<any[]>([]);
+  const [extractedTasks, setExtractedTasks] = useState<EditableExtractedTask[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [recognitionError, setRecognitionError] = useState<string | null>(null);
@@ -30,6 +46,65 @@ export default function RecordTaskScreen() {
   const [isInClarificationMode, setIsInClarificationMode] = useState(false);
   const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'ai', content: string}>>([]);
+
+  const formatDateInput = useCallback((value?: string | Date) => {
+    if (!value) {
+      return undefined;
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date.toISOString().split('T')[0];
+  }, []);
+
+  const normalizeExtractedTaskList = useCallback((tasks: any[] = []): EditableExtractedTask[] => {
+    return tasks.map((task) => ({
+      title: (task?.title || '').trim() || 'Untitled Task',
+      description: (task?.description || '').trim(),
+      priority: PRIORITY_OPTIONS.includes(task?.priority) ? task.priority : 'medium',
+      tags: Array.isArray(task?.tags)
+        ? task.tags.filter(Boolean).map((tag: string) => tag.trim()).filter(Boolean)
+        : [],
+      dueDate: formatDateInput(task?.dueDate) ?? '',
+      status: task?.status && STATUS_OPTIONS.includes(task.status)
+        ? task.status
+        : 'todo',
+    }));
+  }, [formatDateInput]);
+
+  const updateExtractedTaskField = useCallback((index: number, field: keyof EditableExtractedTask, value: any) => {
+    setExtractedTasks((prev) =>
+      prev.map((task, taskIndex) => {
+        if (taskIndex !== index) {
+          return task;
+        }
+
+        if (field === 'tags') {
+          const tagString = typeof value === 'string' ? value : Array.isArray(value) ? value.join(',') : '';
+          return {
+            ...task,
+            tags: tagString
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+          };
+        }
+
+        if (field === 'dueDate') {
+          return {
+            ...task,
+            dueDate: typeof value === 'string' ? value : formatDateInput(value) ?? '',
+          };
+        }
+
+        return {
+          ...task,
+          [field]: value,
+        } as EditableExtractedTask;
+      })
+    );
+  }, [formatDateInput]);
 
   const interimTranscriptRef = useRef('');
   useEffect(() => {
@@ -68,6 +143,7 @@ export default function RecordTaskScreen() {
   }, [interimTranscript, isRecording, normalizeText, transcript]);
 
   const hasTranscriptContent = displayedTranscript.length > 0;
+  const editableTextColor = useMemo(() => (isDarkMode ? '#020617' : '#0f172a'), [isDarkMode]);
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -318,9 +394,11 @@ export default function RecordTaskScreen() {
         return;
       }
 
-      setTranscript('');
-      setInterimTranscript('');
       setRecognitionError(null);
+      setIsEditing(false);
+      setShowConfirmation(false);
+      setTranscript((prev) => mergeTranscript(prev, interimTranscriptRef.current));
+      setInterimTranscript('');
       
       // Check permission first
       if (hasPermission === false) {
@@ -407,6 +485,8 @@ export default function RecordTaskScreen() {
       Alert.alert('Error', 'Please record or type something first');
       return;
     }
+    setTranscript(finalizedTranscript);
+    setInterimTranscript('');
     setIsEditing(false);
     processTranscriptWithAI(finalizedTranscript);
   };
@@ -470,7 +550,7 @@ export default function RecordTaskScreen() {
 
       if (data.success && data.tasks && data.tasks.length > 0) {
         // AI successfully extracted tasks
-        setExtractedTasks(data.tasks);
+        setExtractedTasks(normalizeExtractedTaskList(data.tasks));
         setIsProcessing(false);
         setShowConfirmation(true);
         // Reset clarification mode
@@ -480,7 +560,7 @@ export default function RecordTaskScreen() {
       } else {
         // AI failed or returned no tasks - use fallback
         const fallbackTasks = extractTasksFromTranscript(transcriptToProcess);
-        setExtractedTasks(fallbackTasks);
+        setExtractedTasks(normalizeExtractedTaskList(fallbackTasks));
         setIsProcessing(false);
         setShowConfirmation(true);
         setIsInClarificationMode(false);
@@ -495,7 +575,7 @@ export default function RecordTaskScreen() {
       console.error('AI extraction failed:', error);
       // Network error or API failure - use local fallback
       const fallbackTasks = extractTasksFromTranscript(transcriptToProcess);
-      setExtractedTasks(fallbackTasks);
+      setExtractedTasks(normalizeExtractedTaskList(fallbackTasks));
       setIsProcessing(false);
       setShowConfirmation(true);
       setIsInClarificationMode(false);
@@ -525,14 +605,16 @@ export default function RecordTaskScreen() {
     }, 2000);
   };
 
-  const extractTasksFromTranscript = (text: string): any[] => {
+  const extractTasksFromTranscript = (text: string): EditableExtractedTask[] => {
     // Fallback method when AI is unavailable
     return [
       {
         title: text.slice(0, 50) + (text.length > 50 ? '...' : ''),
         description: text,
         priority: 'medium',
-        tags: extractTags(text)
+        tags: extractTags(text),
+        dueDate: '',
+        status: 'todo',
       }
     ];
   };
@@ -570,15 +652,20 @@ export default function RecordTaskScreen() {
       // Save all extracted tasks (can be multiple from AI)
       for (const taskData of extractedTasks) {
         // Ensure all required fields are present with proper defaults
+        const parsedDueDate = taskData.dueDate ? new Date(taskData.dueDate) : undefined;
+        const validDueDate = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate : undefined;
+        const tags = Array.isArray(taskData.tags) ? taskData.tags.filter(Boolean) : [];
+
         const taskToSave = {
           title: taskData.title || 'Untitled Task',
           description: taskData.description || taskData.title || '',
-          tags: Array.isArray(taskData.tags) ? taskData.tags : ['general'],
-          status: 'todo' as const,
-          priority: (taskData.priority || 'medium') as 'low' | 'medium' | 'high' | 'urgent',
-          dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
+          tags: tags.length > 0 ? tags : ['general'],
+          status: (taskData.status && STATUS_OPTIONS.includes(taskData.status)
+            ? taskData.status
+            : 'todo') as TaskStatus,
+          priority: (taskData.priority || 'medium') as PriorityLevel,
+          dueDate: validDueDate,
           timeSpent: 0,
-          timerStatus: 'stopped' as const,
         };
         
         await addTask(taskToSave);
@@ -758,38 +845,74 @@ export default function RecordTaskScreen() {
             </View>
 
             {extractedTasks.map((task, index) => (
-              <View key={index} style={styles.extractedTask}>
+              <View key={`extracted-${index}`} style={styles.extractedTask}>
                 <View style={styles.extractedTaskHeader}>
-                  <Text style={styles.extractedTaskTitle}>{task.title}</Text>
-                  {task.priority && (
-                    <View style={[
-                      styles.priorityBadge,
-                      task.priority === 'urgent' && styles.priorityUrgent,
-                      task.priority === 'high' && styles.priorityHigh,
-                      task.priority === 'medium' && styles.priorityMedium,
-                      task.priority === 'low' && styles.priorityLow,
-                    ]}>
-                      <Text style={styles.priorityText}>{task.priority}</Text>
-                    </View>
-                  )}
+                  <Text style={styles.extractedTaskTitle}>Task {index + 1}</Text>
+                  <Text style={styles.extractedTaskSubtitle}>Tap fields to edit before saving</Text>
                 </View>
-                {task.description && task.description !== task.title && (
-                  <Text style={styles.extractedTaskDescription} numberOfLines={2}>
-                    {task.description}
-                  </Text>
-                )}
-                {task.dueDate && (
-                  <Text style={styles.extractedTaskDueDate}>
-                    Due: {new Date(task.dueDate).toLocaleDateString()}
-                  </Text>
-                )}
-                <View style={styles.extractedTaskTags}>
-                  {task.tags && task.tags.map((tag: string) => (
-                    <View key={tag} style={styles.extractedTag}>
-                      <Text style={styles.extractedTagText}>{tag}</Text>
-                    </View>
+
+                <Text style={styles.editLabel}>Title</Text>
+                <TextInput
+                  style={[styles.editableInput, { color: editableTextColor }]}
+                  value={task.title}
+                  onChangeText={(text) => updateExtractedTaskField(index, 'title', text)}
+                />
+
+                <Text style={styles.editLabel}>Description</Text>
+                <TextInput
+                  style={[styles.editableInput, styles.editableInputMultiline, { color: editableTextColor }]}
+                  value={task.description}
+                  onChangeText={(text) => updateExtractedTaskField(index, 'description', text)}
+                  multiline
+                />
+
+                <Text style={styles.editLabel}>Priority</Text>
+                <View style={styles.chipRow}>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={`${option}-${index}`}
+                      style={[styles.chip, task.priority === option && styles.chipActive]}
+                      onPress={() => updateExtractedTaskField(index, 'priority', option)}
+                    >
+                      <Text style={[styles.chipText, task.priority === option && styles.chipTextActive]}>
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
                   ))}
                 </View>
+
+                <Text style={styles.editLabel}>Status</Text>
+                <View style={styles.chipRow}>
+                  {STATUS_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={`${option}-${index}`}
+                      style={[styles.chip, task.status === option && styles.chipActive]}
+                      onPress={() => updateExtractedTaskField(index, 'status', option)}
+                    >
+                      <Text style={[styles.chipText, task.status === option && styles.chipTextActive]}>
+                        {option.replace('-', ' ')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.editLabel}>Due Date</Text>
+                <TextInput
+                  style={[styles.editableInput, { color: editableTextColor }]}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94a3b8"
+                  value={task.dueDate ?? ''}
+                  onChangeText={(value) => updateExtractedTaskField(index, 'dueDate', value)}
+                />
+
+                <Text style={styles.editLabel}>Tags (comma separated)</Text>
+                <TextInput
+                  style={[styles.editableInput, { color: editableTextColor }]}
+                  placeholder="e.g. auth, api, dashboard"
+                  placeholderTextColor="#94a3b8"
+                  value={task.tags.join(', ')}
+                  onChangeText={(value) => updateExtractedTaskField(index, 'tags', value)}
+                />
               </View>
             ))}
 
@@ -1055,6 +1178,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  extractedTaskSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
   extractedTaskDescription: {
     fontSize: 14,
     color: '#6b7280',
@@ -1105,6 +1233,56 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#1e40af',
     fontWeight: '500',
+  },
+  editLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 6,
+    marginTop: 8,
+    textTransform: 'uppercase',
+  },
+  editableInput: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  editableInputMultiline: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginVertical: 6,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5f5',
+    backgroundColor: '#ffffff',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  chipActive: {
+    backgroundColor: '#1d4ed8',
+    borderColor: '#1d4ed8',
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1e3a8a',
+    textTransform: 'capitalize',
+  },
+  chipTextActive: {
+    color: '#ffffff',
   },
   confirmationButtons: {
     flexDirection: 'row',
