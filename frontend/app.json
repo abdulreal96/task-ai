@@ -50,7 +50,7 @@
       "eas": {
         "projectId": "6454eaff-2890-4bd2-9528-fba2a241d859"
       },
-      "apiUrl": "http://194.163.150.173:3000"
+      "apiUrl": "https://task-ai.ilimtutor.com"
     }
   }
 }

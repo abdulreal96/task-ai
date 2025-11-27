@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 // Backend server IP address - configurable via app.json
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://194.163.150.173:3000';
+const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://task-ai.ilimtutor.com';
 
 const api = axios.create({
   baseURL: API_URL,

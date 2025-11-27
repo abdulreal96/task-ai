@@ -1,16 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mic, X, Check, Edit3, Send } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
-import {
-  useSpeechRecognitionEvent,
-  ExpoSpeechRecognitionModule,
-  AudioEncodingAndroid,
-} from "expo-speech-recognition";
+import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 
 export default function RecordTaskScreen() {
   const { addTask } = useTasks();
@@ -22,6 +18,14 @@ export default function RecordTaskScreen() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [recognitionError, setRecognitionError] = useState<string | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [isSpeechModuleReady, setIsSpeechModuleReady] = useState<boolean>(() => {
+    return (
+      !!ExpoSpeechRecognitionModule &&
+      typeof ExpoSpeechRecognitionModule.start === "function"
+    );
+  });
+  const [speechServicePackage, setSpeechServicePackage] = useState<string | null>(null);
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -29,25 +33,155 @@ export default function RecordTaskScreen() {
     Array.from({ length: 20 }, () => new Animated.Value(10))
   ).current;
 
-  // Live speech recognition event listener
-  useSpeechRecognitionEvent("result", (event) => {
-    // Update transcript with live results as you speak
+  // Check permissions on mount
+  useEffect(() => {
+    const ready =
+      !!ExpoSpeechRecognitionModule &&
+      typeof ExpoSpeechRecognitionModule.start === "function" &&
+      typeof ExpoSpeechRecognitionModule.requestPermissionsAsync === "function";
+
+    setIsSpeechModuleReady(ready);
+
+    if (!ready) {
+      Alert.alert(
+        "Configuration Error",
+        "Speech recognition is unavailable on this build. Please uninstall the app, install the latest EAS build, and try again."
+      );
+      return;
+    }
+
+    checkPermissions();
+  }, []);
+
+  const detectSpeechService = useCallback(async () => {
+    if (!ExpoSpeechRecognitionModule || Platform.OS !== "android") {
+      return;
+    }
+
+    try {
+      if (typeof ExpoSpeechRecognitionModule.getSpeechRecognitionServices === "function") {
+        const services: string[] = await ExpoSpeechRecognitionModule.getSpeechRecognitionServices();
+        if (Array.isArray(services) && services.length > 0) {
+          const preferredPackages = [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.as",
+            "com.samsung.android.bixby.agent",
+          ];
+          const preferred = preferredPackages.find((pkg) => services.includes(pkg));
+          setSpeechServicePackage(preferred ?? services[0]);
+          return;
+        }
+      }
+
+      if (typeof ExpoSpeechRecognitionModule.getDefaultRecognitionService === "function") {
+        const defaultService = await ExpoSpeechRecognitionModule.getDefaultRecognitionService();
+        if (defaultService?.packageName) {
+          setSpeechServicePackage(defaultService.packageName);
+        }
+      }
+    } catch (error) {
+      console.warn("Speech service detection failed:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isSpeechModuleReady) {
+      detectSpeechService();
+    }
+  }, [isSpeechModuleReady, detectSpeechService]);
+
+  const checkPermissions = async () => {
+    try {
+      if (
+        !ExpoSpeechRecognitionModule ||
+        typeof ExpoSpeechRecognitionModule.getPermissionsAsync !== "function" ||
+        typeof ExpoSpeechRecognitionModule.requestPermissionsAsync !== "function"
+      ) {
+        return;
+      }
+      
+      const result = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+      setHasPermission(result.granted);
+      
+      if (!result.granted) {
+        // Request permissions immediately
+        const requestResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        setHasPermission(requestResult.granted);
+        
+        if (!requestResult.granted) {
+          Alert.alert(
+            "Permission Required",
+            "Microphone permission is required for voice recording. Please enable it in your device settings.",
+            [{ text: "OK" }]
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error("Permission check failed:", error);
+      Alert.alert("Error", "Failed to check permissions: " + error.message);
+    }
+  };
+
+  const handleResultEvent = useCallback((event: any) => {
+    if (!event?.results) {
+      return;
+    }
+
     const liveTranscript = event.results
-      .map((result) => result.transcript)
+      .map((result: any) => result.transcript)
       .join(" ");
     setTranscript(liveTranscript);
-  });
+  }, []);
 
-  useSpeechRecognitionEvent("error", (event) => {
+  const handleErrorEvent = useCallback((event: any) => {
+    if (!event) {
+      return;
+    }
+
     console.error("Speech recognition error:", event);
-    setRecognitionError(event.error);
+    const message = event.message || event.error || "Unknown error occurred";
+    setRecognitionError(message);
     setIsRecording(false);
-  });
+    Alert.alert("Speech Recognition Error", message);
+  }, []);
 
-  useSpeechRecognitionEvent("end", () => {
-    // Speech recognition ended
+  const handleEndEvent = useCallback(() => {
     setIsRecording(false);
-  });
+  }, []);
+
+  useEffect(() => {
+    if (
+      !isSpeechModuleReady ||
+      !ExpoSpeechRecognitionModule ||
+      typeof (ExpoSpeechRecognitionModule as any).addListener !== "function"
+    ) {
+      return;
+    }
+
+    const resultSub = (ExpoSpeechRecognitionModule as any).addListener(
+      "result",
+      handleResultEvent
+    );
+    const errorSub = (ExpoSpeechRecognitionModule as any).addListener(
+      "error",
+      handleErrorEvent
+    );
+    const endSub = (ExpoSpeechRecognitionModule as any).addListener(
+      "end",
+      handleEndEvent
+    );
+
+    return () => {
+      resultSub?.remove?.();
+      errorSub?.remove?.();
+      endSub?.remove?.();
+    };
+  }, [
+    isSpeechModuleReady,
+    handleResultEvent,
+    handleErrorEvent,
+    handleEndEvent,
+  ]);
 
   useEffect(() => {
     if (isRecording) {
@@ -94,18 +228,46 @@ export default function RecordTaskScreen() {
 
   const startRecording = async () => {
     try {
-      setTranscript('');
-      setRecognitionError(null);
-      
-      // Request permissions
-      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!result.granted) {
-        Alert.alert("Permission Required", "Please grant microphone permission to use voice recording.");
+      if (
+        !isSpeechModuleReady ||
+        !ExpoSpeechRecognitionModule ||
+        typeof ExpoSpeechRecognitionModule.requestPermissionsAsync !== "function" ||
+        typeof ExpoSpeechRecognitionModule.start !== "function"
+      ) {
+        Alert.alert(
+          "Configuration Error",
+          "Speech recognition is unavailable. Please reinstall the latest build before recording."
+        );
         return;
       }
 
+      setTranscript('');
+      setRecognitionError(null);
+      
+      // Check permission first
+      if (hasPermission === false) {
+        Alert.alert(
+          "Permission Required",
+          "Please enable microphone permission in your device settings to use voice recording."
+        );
+        return;
+      }
+
+      // Request permissions again if not sure
+      const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!result.granted) {
+        Alert.alert(
+          "Permission Denied",
+          "Microphone permission is required for voice recording. Please enable it in your device settings."
+        );
+        setHasPermission(false);
+        return;
+      }
+
+      setHasPermission(true);
+
       // Start live speech recognition
-      await ExpoSpeechRecognitionModule.start({
+      const recognitionOptions: Record<string, any> = {
         lang: "en-US",
         interimResults: true, // Get live results as you speak
         maxAlternatives: 1,
@@ -114,12 +276,17 @@ export default function RecordTaskScreen() {
         addsPunctuation: true,
         contextualStrings: ["task", "todo", "implement", "fix", "bug", "feature"],
         // Android-specific options
-        androidRecognitionServicePackage: "com.google.android.googlequicksearchbox",
         androidIntentOptions: {
           EXTRA_LANGUAGE_MODEL: "free_form",
           EXTRA_PARTIAL_RESULTS: true,
         },
-      });
+      };
+
+      if (Platform.OS === "android" && speechServicePackage) {
+        recognitionOptions.androidRecognitionServicePackage = speechServicePackage;
+      }
+
+      await ExpoSpeechRecognitionModule.start(recognitionOptions);
 
       setIsRecording(true);
     } catch (error: any) {
@@ -130,7 +297,12 @@ export default function RecordTaskScreen() {
 
   const stopRecording = async () => {
     try {
-      await ExpoSpeechRecognitionModule.stop();
+      if (
+        ExpoSpeechRecognitionModule &&
+        typeof ExpoSpeechRecognitionModule.stop === "function"
+      ) {
+        await ExpoSpeechRecognitionModule.stop();
+      }
       setIsRecording(false);
       
       if (transcript.trim()) {
@@ -156,7 +328,7 @@ export default function RecordTaskScreen() {
     
     try {
       // Call the real AI backend endpoint
-      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://194.163.150.173:3000';
+      const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://task-ai.ilimtutor.com';
       const response = await fetch(`${API_URL}/ai/extract-tasks`, {
         method: 'POST',
         headers: {
