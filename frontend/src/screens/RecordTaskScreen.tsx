@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform, Modal, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mic, X, Check, Edit3, Send } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
@@ -7,6 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -46,6 +47,13 @@ export default function RecordTaskScreen() {
   const [isInClarificationMode, setIsInClarificationMode] = useState(false);
   const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'ai', content: string}>>([]);
+  const [activeDatePickerIndex, setActiveDatePickerIndex] = useState<number | null>(null);
+  const [showIosDatePicker, setShowIosDatePicker] = useState(false);
+  const [iosPickerDate, setIosPickerDate] = useState(new Date());
+  const processingSpinnerAnim = useRef(new Animated.Value(0)).current;
+  const processingGlowAnim = useRef(new Animated.Value(0)).current;
+  const [processingDots, setProcessingDots] = useState('.');
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
 
   const formatDateInput = useCallback((value?: string | Date) => {
     if (!value) {
@@ -144,12 +152,74 @@ export default function RecordTaskScreen() {
 
   const hasTranscriptContent = displayedTranscript.length > 0;
   const editableTextColor = useMemo(() => (isDarkMode ? '#020617' : '#0f172a'), [isDarkMode]);
+  const formatDueDateDisplay = useCallback((value?: string) => {
+    if (!value) {
+      return 'Select a date';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return 'Select a date';
+    }
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }, []);
+
+  const openDueDatePicker = useCallback((index: number) => {
+    const task = extractedTasks[index];
+    const currentDate = task?.dueDate ? new Date(task.dueDate) : new Date();
+
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        mode: 'date',
+        value: Number.isNaN(currentDate.getTime()) ? new Date() : currentDate,
+        onChange: (_, date) => {
+          if (date) {
+            updateExtractedTaskField(index, 'dueDate', date);
+          }
+        },
+      });
+      return;
+    }
+
+    setIosPickerDate(Number.isNaN(currentDate.getTime()) ? new Date() : currentDate);
+    setActiveDatePickerIndex(index);
+    setShowIosDatePicker(true);
+  }, [extractedTasks, updateExtractedTaskField]);
+
+  const closeIosDatePicker = useCallback(() => {
+    setShowIosDatePicker(false);
+    setActiveDatePickerIndex(null);
+  }, []);
+
+  const handleIosDateChange = useCallback((_: any, selectedDate?: Date) => {
+    if (selectedDate) {
+      setIosPickerDate(selectedDate);
+      if (activeDatePickerIndex !== null) {
+        updateExtractedTaskField(activeDatePickerIndex, 'dueDate', selectedDate);
+      }
+    }
+  }, [activeDatePickerIndex, updateExtractedTaskField]);
+
+  const clearDueDate = useCallback((index: number) => {
+    updateExtractedTaskField(index, 'dueDate', '');
+  }, [updateExtractedTaskField]);
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const waveAnimations = useRef(
     Array.from({ length: 20 }, () => new Animated.Value(10))
   ).current;
+  const spinnerRotation = processingSpinnerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  const glowOpacity = processingGlowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.85],
+  });
+  const glowScale = processingGlowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.9, 1.05],
+  });
 
   // Check permissions on mount
   useEffect(() => {
@@ -379,6 +449,58 @@ export default function RecordTaskScreen() {
     }
   }, [isRecording]);
 
+  useEffect(() => {
+    if (isProcessing) {
+      const spinnerLoop = Animated.loop(
+        Animated.timing(processingSpinnerAnim, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      const glowLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(processingGlowAnim, {
+            toValue: 1,
+            duration: 900,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(processingGlowAnim, {
+            toValue: 0,
+            duration: 900,
+            easing: Easing.in(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      spinnerLoop.start();
+      glowLoop.start();
+
+      return () => {
+        processingSpinnerAnim.stopAnimation(() => processingSpinnerAnim.setValue(0));
+        processingGlowAnim.stopAnimation(() => processingGlowAnim.setValue(0));
+      };
+    }
+
+    processingSpinnerAnim.stopAnimation(() => processingSpinnerAnim.setValue(0));
+    processingGlowAnim.stopAnimation(() => processingGlowAnim.setValue(0));
+  }, [isProcessing, processingGlowAnim, processingSpinnerAnim]);
+
+  useEffect(() => {
+    if (!isProcessing) {
+      setProcessingDots('.');
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setProcessingDots((prev) => (prev.length === 3 ? '.' : prev + '.'));
+    }, 350);
+
+    return () => clearInterval(interval);
+  }, [isProcessing]);
+
   const startRecording = async () => {
     try {
       if (
@@ -553,7 +675,16 @@ export default function RecordTaskScreen() {
         setExtractedTasks(normalizeExtractedTaskList(data.tasks));
         setIsProcessing(false);
         setShowConfirmation(true);
+        setAiMessage(null);
         // Reset clarification mode
+        setIsInClarificationMode(false);
+        setClarificationQuestion(null);
+        setConversationHistory([]);
+      } else if (data.success && Array.isArray(data.tasks) && data.tasks.length === 0) {
+        setExtractedTasks([]);
+        setIsProcessing(false);
+        setShowConfirmation(true);
+        setAiMessage(data.message || 'I did not detect any actionable engineering tasks. Try adding more implementation details.');
         setIsInClarificationMode(false);
         setClarificationQuestion(null);
         setConversationHistory([]);
@@ -563,6 +694,7 @@ export default function RecordTaskScreen() {
         setExtractedTasks(normalizeExtractedTaskList(fallbackTasks));
         setIsProcessing(false);
         setShowConfirmation(true);
+        setAiMessage(null);
         setIsInClarificationMode(false);
         setClarificationQuestion(null);
         setConversationHistory([]);
@@ -578,6 +710,7 @@ export default function RecordTaskScreen() {
       setExtractedTasks(normalizeExtractedTaskList(fallbackTasks));
       setIsProcessing(false);
       setShowConfirmation(true);
+      setAiMessage(null);
       setIsInClarificationMode(false);
       setClarificationQuestion(null);
       setConversationHistory([]);
@@ -676,6 +809,7 @@ export default function RecordTaskScreen() {
       setInterimTranscript('');
       setExtractedTasks([]);
       setShowConfirmation(false);
+      setAiMessage(null);
       Alert.alert('Success', `${extractedTasks.length} task(s) saved successfully`);
     } catch (error: any) {
       console.error('Failed to save tasks:', error);
@@ -826,8 +960,9 @@ export default function RecordTaskScreen() {
         {/* Processing State */}
         {isProcessing && (
           <View style={styles.processingContainer}>
-            <View style={styles.spinner} />
-            <Text style={[styles.processingText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Processing with AI...</Text>
+            <Animated.View style={[styles.processingGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+            <Animated.View style={[styles.spinner, { transform: [{ rotate: spinnerRotation }] }]} />
+            <Text style={[styles.processingText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Processing with AI{processingDots}</Text>
             <Text style={[styles.processingSubText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Extracting tasks and tags</Text>
           </View>
         )}
@@ -844,77 +979,94 @@ export default function RecordTaskScreen() {
               </Text>
             </View>
 
-            {extractedTasks.map((task, index) => (
-              <View key={`extracted-${index}`} style={styles.extractedTask}>
-                <View style={styles.extractedTaskHeader}>
-                  <Text style={styles.extractedTaskTitle}>Task {index + 1}</Text>
-                  <Text style={styles.extractedTaskSubtitle}>Tap fields to edit before saving</Text>
-                </View>
-
-                <Text style={styles.editLabel}>Title</Text>
-                <TextInput
-                  style={[styles.editableInput, { color: editableTextColor }]}
-                  value={task.title}
-                  onChangeText={(text) => updateExtractedTaskField(index, 'title', text)}
-                />
-
-                <Text style={styles.editLabel}>Description</Text>
-                <TextInput
-                  style={[styles.editableInput, styles.editableInputMultiline, { color: editableTextColor }]}
-                  value={task.description}
-                  onChangeText={(text) => updateExtractedTaskField(index, 'description', text)}
-                  multiline
-                />
-
-                <Text style={styles.editLabel}>Priority</Text>
-                <View style={styles.chipRow}>
-                  {PRIORITY_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={`${option}-${index}`}
-                      style={[styles.chip, task.priority === option && styles.chipActive]}
-                      onPress={() => updateExtractedTaskField(index, 'priority', option)}
-                    >
-                      <Text style={[styles.chipText, task.priority === option && styles.chipTextActive]}>
-                        {option}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.editLabel}>Status</Text>
-                <View style={styles.chipRow}>
-                  {STATUS_OPTIONS.map((option) => (
-                    <TouchableOpacity
-                      key={`${option}-${index}`}
-                      style={[styles.chip, task.status === option && styles.chipActive]}
-                      onPress={() => updateExtractedTaskField(index, 'status', option)}
-                    >
-                      <Text style={[styles.chipText, task.status === option && styles.chipTextActive]}>
-                        {option.replace('-', ' ')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.editLabel}>Due Date</Text>
-                <TextInput
-                  style={[styles.editableInput, { color: editableTextColor }]}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94a3b8"
-                  value={task.dueDate ?? ''}
-                  onChangeText={(value) => updateExtractedTaskField(index, 'dueDate', value)}
-                />
-
-                <Text style={styles.editLabel}>Tags (comma separated)</Text>
-                <TextInput
-                  style={[styles.editableInput, { color: editableTextColor }]}
-                  placeholder="e.g. auth, api, dashboard"
-                  placeholderTextColor="#94a3b8"
-                  value={task.tags.join(', ')}
-                  onChangeText={(value) => updateExtractedTaskField(index, 'tags', value)}
-                />
+            {extractedTasks.length === 0 ? (
+              <View style={styles.noTasksContainer}>
+                <Text style={styles.noTasksTitle}>No tasks yet</Text>
+                <Text style={styles.noTasksMessage}>
+                  {aiMessage || 'I did not find any developer tasks in that message. Try adding concrete implementation or bug details.'}
+                </Text>
+                <Text style={styles.noTasksHint}>Tap Try Again to record a new request.</Text>
               </View>
-            ))}
+            ) : (
+              <ScrollView style={styles.confirmationScroll} contentContainerStyle={styles.confirmationScrollContent} nestedScrollEnabled>
+                {extractedTasks.map((task, index) => (
+                  <View key={`extracted-${index}`} style={styles.extractedTask}>
+                    <View style={styles.extractedTaskHeader}>
+                      <Text style={styles.extractedTaskTitle}>Task {index + 1}</Text>
+                      <Text style={styles.extractedTaskSubtitle}>Tap fields to edit before saving</Text>
+                    </View>
+
+                    <Text style={styles.editLabel}>Title</Text>
+                    <TextInput
+                      style={[styles.editableInput, { color: editableTextColor }]}
+                      value={task.title}
+                      onChangeText={(text) => updateExtractedTaskField(index, 'title', text)}
+                    />
+
+                    <Text style={styles.editLabel}>Description</Text>
+                    <TextInput
+                      style={[styles.editableInput, styles.editableInputMultiline, { color: editableTextColor }]}
+                      value={task.description}
+                      onChangeText={(text) => updateExtractedTaskField(index, 'description', text)}
+                      multiline
+                    />
+
+                    <Text style={styles.editLabel}>Priority</Text>
+                    <View style={styles.chipRow}>
+                      {PRIORITY_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={`${option}-${index}`}
+                          style={[styles.chip, task.priority === option && styles.chipActive]}
+                          onPress={() => updateExtractedTaskField(index, 'priority', option)}
+                        >
+                          <Text style={[styles.chipText, task.priority === option && styles.chipTextActive]}>
+                            {option}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.editLabel}>Status</Text>
+                    <View style={styles.chipRow}>
+                      {STATUS_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={`${option}-${index}`}
+                          style={[styles.chip, task.status === option && styles.chipActive]}
+                          onPress={() => updateExtractedTaskField(index, 'status', option)}
+                        >
+                          <Text style={[styles.chipText, task.status === option && styles.chipTextActive]}>
+                            {option.replace('-', ' ')}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={styles.editLabel}>Due Date</Text>
+                    <View style={styles.dueDateRow}>
+                      <TouchableOpacity style={styles.dueDateButton} onPress={() => openDueDatePicker(index)}>
+                        <Text style={[styles.dueDateButtonText, { color: editableTextColor }]}>
+                          {formatDueDateDisplay(task.dueDate)}
+                        </Text>
+                      </TouchableOpacity>
+                      {task.dueDate ? (
+                        <TouchableOpacity style={styles.clearDateButton} onPress={() => clearDueDate(index)}>
+                          <Text style={styles.clearDateButtonText}>Clear</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.editLabel}>Tags (comma separated)</Text>
+                    <TextInput
+                      style={[styles.editableInput, { color: editableTextColor }]}
+                      placeholder="e.g. auth, api, dashboard"
+                      placeholderTextColor="#94a3b8"
+                      value={task.tags.join(', ')}
+                      onChangeText={(value) => updateExtractedTaskField(index, 'tags', value)}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            )}
 
             <View style={styles.confirmationButtons}>
               <TouchableOpacity
@@ -923,17 +1075,39 @@ export default function RecordTaskScreen() {
                   setShowConfirmation(false);
                   setTranscript('');
                   setInterimTranscript('');
+                  setExtractedTasks([]);
+                  setAiMessage(null);
                 }}
               >
                 <Text style={styles.tryAgainButtonText}>Try Again</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={confirmTasks}>
-                <Text style={styles.confirmButtonText}>Confirm</Text>
-              </TouchableOpacity>
+              {extractedTasks.length > 0 && (
+                <TouchableOpacity style={styles.confirmButton} onPress={confirmTasks}>
+                  <Text style={styles.confirmButtonText}>Confirm</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
       </View>
+      {showIosDatePicker && (
+        <Modal transparent animationType="fade" visible={showIosDatePicker} onRequestClose={closeIosDatePicker}>
+          <View style={styles.datePickerOverlay}>
+            <View style={[styles.datePickerContainer, { backgroundColor: isDarkMode ? '#0f172a' : '#ffffff' }]}>
+              <DateTimePicker
+                mode="date"
+                value={iosPickerDate}
+                display="spinner"
+                onChange={handleIosDateChange}
+                style={styles.iosPicker}
+              />
+              <TouchableOpacity style={styles.closeDatePickerButton} onPress={closeIosDatePicker}>
+                <Text style={styles.closeDatePickerText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1113,6 +1287,15 @@ const styles = StyleSheet.create({
   },
   processingContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  processingGlow: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(37, 99, 235, 0.4)',
   },
   spinner: {
     width: 64,
@@ -1139,6 +1322,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 16,
     padding: 24,
+  },
+  confirmationScroll: {
+    maxHeight: 360,
+  },
+  confirmationScrollContent: {
+    paddingBottom: 12,
+  },
+  noTasksContainer: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 20,
+  },
+  noTasksTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e3a8a',
+    marginBottom: 8,
+  },
+  noTasksMessage: {
+    fontSize: 14,
+    color: '#1e3a8a',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  noTasksHint: {
+    fontSize: 13,
+    color: '#1d4ed8',
   },
   confirmationHeader: {
     flexDirection: 'row',
@@ -1284,6 +1494,35 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#ffffff',
   },
+  dueDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  dueDateButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#f8fafc',
+  },
+  dueDateButtonText: {
+    fontSize: 14,
+  },
+  clearDateButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
+  },
+  clearDateButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#991b1b',
+  },
   confirmationButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -1314,5 +1553,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  datePickerContainer: {
+    width: '100%',
+    borderRadius: 16,
+    padding: 16,
+  },
+  iosPicker: {
+    width: '100%',
+  },
+  closeDatePickerButton: {
+    marginTop: 12,
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+  },
+  closeDatePickerText: {
+    color: '#ffffff',
+    fontWeight: '600',
   },
 });

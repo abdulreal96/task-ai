@@ -44,8 +44,8 @@ export class AiController {
 
       return {
         success: true,
-        message: `Successfully extracted ${result.tasks.length} task(s)`,
-        tasks: result.tasks
+        message: result.message || `Successfully extracted ${result.tasks.length} task(s)`,
+        tasks: result.tasks,
       };
     } catch (error) {
       return {

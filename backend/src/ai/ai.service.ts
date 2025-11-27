@@ -14,6 +14,7 @@ export interface TaskExtractionResponse {
   tasks: ExtractedTask[];
   needsClarification?: boolean;
   clarificationQuestion?: string;
+  message?: string;
 }
 
 @Injectable()
@@ -43,14 +44,16 @@ export class AiService {
       // Parse AI response and extract tasks
       const result = this.parseAIResponse(aiResponse);
 
+      const filteredResult = this.filterIrrelevantTasks(transcript, result);
+
       // Check if AI needs clarification
-      if (result.needsClarification && result.clarificationQuestion) {
+      if (filteredResult.needsClarification && filteredResult.clarificationQuestion) {
         this.logger.log('AI requesting clarification');
-        return result;
+        return filteredResult;
       }
 
-      this.logger.log(`Successfully extracted ${result.tasks.length} tasks`);
-      return result;
+      this.logger.log(`Successfully extracted ${filteredResult.tasks.length} tasks after filtering`);
+      return filteredResult;
     } catch (error) {
       this.logger.error('Failed to extract tasks from transcript', error);
       // Fallback: Create a single task if AI fails
@@ -76,16 +79,17 @@ CURRENT TRANSCRIPT:
 "${transcript}"
 
 INSTRUCTIONS:
-1. Identify all distinct tasks or action items mentioned
-2. If the transcript is too vague or doesn't contain clear tasks, ask for clarification
-3. For each task, extract:
+1. Identify all distinct software engineering tasks or action items that require coding, testing, deployment, or design work.
+2. If the transcript is too vague or doesn't contain clear engineering tasks, ask for clarification.
+3. If the transcript is NOT about software development work (e.g., it's a greeting, personal reminder, or unrelated request), respond with ZERO tasks and provide a short explanation of why no work was created.
+4. For each task, extract:
    - A clear, concise title (max 60 characters)
    - A detailed description
    - Priority level (low, medium, high, or urgent)
    - Relevant tags (e.g., bug, feature, implement, design, api, authentication)
    - Due date if mentioned (ISO format YYYY-MM-DD)
 
-4. Return ONLY valid JSON in ONE of these formats:
+5. Return ONLY valid JSON in ONE of these formats:
 
 IF TASKS ARE CLEAR:
 {
@@ -105,6 +109,12 @@ IF CLARIFICATION IS NEEDED:
   "needsClarification": true,
   "clarificationQuestion": "Your specific question here",
   "tasks": []
+}
+
+IF THERE ARE NO SOFTWARE TASKS:
+{
+  "tasks": [],
+  "message": "Explain briefly why no tasks were generated"
 }
 
 RESPONSE (JSON ONLY):`;
@@ -165,7 +175,8 @@ RESPONSE (JSON ONLY):`;
             priority: this.validatePriority(task.priority),
             tags: Array.isArray(task.tags) ? task.tags : [],
             dueDate: task.dueDate || undefined,
-          }))
+          })),
+          message: parsed.message || parsed.reason,
         };
       }
 
@@ -182,6 +193,54 @@ RESPONSE (JSON ONLY):`;
     return validPriorities.includes(priority?.toLowerCase()) 
       ? priority.toLowerCase() as any
       : 'medium';
+  }
+
+  private filterIrrelevantTasks(transcript: string, result: TaskExtractionResponse): TaskExtractionResponse {
+    if (result.needsClarification) {
+      return result;
+    }
+
+    const relevantTasks = (result.tasks || []).filter((task) => this.isTaskRelevant(task));
+    const transcriptRelevant = this.containsEngineeringKeywords(transcript);
+
+    if (relevantTasks.length === 0 || !transcriptRelevant) {
+      return {
+        ...result,
+        tasks: [],
+        message: result.message || 'No actionable software tasks detected. Please describe a bug, feature, or engineering change.',
+      };
+    }
+
+    return {
+      ...result,
+      tasks: relevantTasks,
+    };
+  }
+
+  private containsEngineeringKeywords(text: string): boolean {
+    const normalized = text.toLowerCase();
+    const keywords = [
+      'bug', 'deploy', 'api', 'endpoint', 'feature', 'issue', 'ticket', 'code', 'refactor',
+      'frontend', 'backend', 'database', 'query', 'ui', 'ux', 'android', 'ios', 'expo',
+      'react', 'nest', 'server', 'integration', 'authentication', 'login', 'task', 'sprint',
+      'release', 'test', 'coverage', 'unit test'
+    ];
+    return keywords.some((keyword) => normalized.includes(keyword));
+  }
+
+  private isTaskRelevant(task: ExtractedTask): boolean {
+    const text = `${task.title ?? ''} ${task.description ?? ''} ${(task.tags || []).join(' ')}`.toLowerCase();
+    if (!text.trim()) {
+      return false;
+    }
+
+    const keywords = [
+      'bug', 'fix', 'implement', 'build', 'document', 'deploy', 'api', 'ui', 'ux', 'android',
+      'ios', 'feature', 'tests', 'refactor', 'optimize', 'auth', 'database', 'server', 'component',
+      'design', 'integration'
+    ];
+
+    return keywords.some((keyword) => text.includes(keyword));
   }
 
   private createFallbackTask(transcript: string): TaskExtractionResponse {
