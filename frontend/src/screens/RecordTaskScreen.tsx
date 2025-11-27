@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform, Modal, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Mic, X, Check, Edit3, Send } from 'lucide-react-native';
+import { Mic, X, Check, Edit3, Send, Sparkles, ListChecks, PenTool } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -960,10 +960,58 @@ export default function RecordTaskScreen() {
         {/* Processing State */}
         {isProcessing && (
           <View style={styles.processingContainer}>
-            <Animated.View style={[styles.processingGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
-            <Animated.View style={[styles.spinner, { transform: [{ rotate: spinnerRotation }] }]} />
-            <Text style={[styles.processingText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Processing with AI{processingDots}</Text>
-            <Text style={[styles.processingSubText, { color: isDarkMode ? '#9ca3af' : '#6b7280' }]}>Extracting tasks and tags</Text>
+            <View style={[styles.processingCard, { backgroundColor: isDarkMode ? '#0f172a' : '#f8fafc' }]}>
+              <LinearGradient
+                colors={isDarkMode ? ['#1e1b4b', '#312e81'] : ['#2563eb', '#1d4ed8']}
+                style={styles.processingGradient}
+              >
+                <Animated.View style={[styles.processingGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+                <Animated.View style={[styles.processingRing, { transform: [{ rotate: spinnerRotation }] }]} />
+                <View style={styles.processingCore}>
+                  <Sparkles size={28} color="#ffffff" />
+                </View>
+              </LinearGradient>
+              <View style={styles.processingCopy}>
+                <Text style={[styles.processingTitle, { color: isDarkMode ? '#f8fafc' : '#0f172a' }]}>Organizing your tasks{processingDots}</Text>
+                <Text style={[styles.processingSubtitle, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>
+                  I’m reviewing the transcript, grouping similar intents, and preparing clean summaries.
+                </Text>
+                <View
+                  style={[styles.processingSteps, {
+                    borderColor: isDarkMode ? '#1e3a8a' : '#e2e8f0',
+                    backgroundColor: isDarkMode ? '#111827' : '#ffffff',
+                  }]}
+                >
+                  <View style={styles.processingStep}>
+                    <View style={[styles.processingStepIcon, { backgroundColor: isDarkMode ? 'rgba(59,130,246,0.2)' : '#dbeafe' }]}>
+                      <Mic size={16} color="#1d4ed8" />
+                    </View>
+                    <View style={styles.processingStepCopy}>
+                      <Text style={[styles.processingStepTitle, { color: isDarkMode ? '#f8fafc' : '#0f172a' }]}>Context capture</Text>
+                      <Text style={[styles.processingStepText, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>Identify services, actors, and constraints.</Text>
+                    </View>
+                  </View>
+                  <View style={styles.processingStep}>
+                    <View style={[styles.processingStepIcon, { backgroundColor: isDarkMode ? 'rgba(59,130,246,0.2)' : '#dbeafe' }]}>
+                      <PenTool size={16} color="#1d4ed8" />
+                    </View>
+                    <View style={styles.processingStepCopy}>
+                      <Text style={[styles.processingStepTitle, { color: isDarkMode ? '#f8fafc' : '#0f172a' }]}>Clarify wording</Text>
+                      <Text style={[styles.processingStepText, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>Fix shorthand like “reverse” vs “driver”.</Text>
+                    </View>
+                  </View>
+                  <View style={styles.processingStep}>
+                    <View style={[styles.processingStepIcon, { backgroundColor: isDarkMode ? 'rgba(59,130,246,0.2)' : '#dbeafe' }]}>
+                      <ListChecks size={16} color="#1d4ed8" />
+                    </View>
+                    <View style={styles.processingStepCopy}>
+                      <Text style={[styles.processingStepTitle, { color: isDarkMode ? '#f8fafc' : '#0f172a' }]}>Draft tasks</Text>
+                      <Text style={[styles.processingStepText, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>Create titles, descriptions, and due dates.</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
           </View>
         )}
 
@@ -1286,35 +1334,104 @@ const styles = StyleSheet.create({
     color: '#1e40af',
   },
   processingContainer: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 200,
+    paddingHorizontal: 16,
+  },
+  processingCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 28,
+    padding: 20,
+    backgroundColor: '#f8fafc',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.25,
+    shadowRadius: 40,
+    elevation: 24,
+  },
+  processingGradient: {
+    borderRadius: 24,
+    height: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   processingGlow: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  processingRing: {
     position: 'absolute',
     width: 180,
     height: 180,
     borderRadius: 90,
-    backgroundColor: 'rgba(37, 99, 235, 0.4)',
-  },
-  spinner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
     borderWidth: 4,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderTopColor: '#ffffff',
+  },
+  processingCore: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingCopy: {
+    marginTop: 20,
+  },
+  processingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 6,
+  },
+  processingSubtitle: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
     marginBottom: 16,
   },
-  processingText: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginBottom: 4,
+  processingSteps: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    paddingVertical: 12,
   },
-  processingSubText: {
+  processingStep: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  processingStepIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingStepCopy: {
+    flex: 1,
+  },
+  processingStepTitle: {
     fontSize: 14,
-    color: '#bfdbfe',
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  processingStepText: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
   },
   confirmationCard: {
     width: '100%',

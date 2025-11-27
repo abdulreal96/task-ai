@@ -33,18 +33,21 @@ export class AiService {
     conversationHistory?: Array<{role: 'user' | 'ai', content: string}>
   ): Promise<TaskExtractionResponse> {
     try {
-      this.logger.log(`Extracting tasks from transcript: ${transcript.substring(0, 100)}...`);
-      if (conversationHistory && conversationHistory.length > 0) {
-        this.logger.log(`With conversation history: ${conversationHistory.length} messages`);
+      const cleanedTranscript = this.sanitizeTranscript(transcript);
+      const normalizedHistory = this.normalizeConversationHistory(conversationHistory);
+
+      this.logger.log(`Extracting tasks from transcript: ${cleanedTranscript.substring(0, 100)}...`);
+      if (normalizedHistory && normalizedHistory.length > 0) {
+        this.logger.log(`With conversation history: ${normalizedHistory.length} messages`);
       }
 
-      const prompt = this.buildTaskExtractionPrompt(transcript, conversationHistory);
+      const prompt = this.buildTaskExtractionPrompt(cleanedTranscript, normalizedHistory);
       const aiResponse = await this.callAI(prompt);
       
       // Parse AI response and extract tasks
       const result = this.parseAIResponse(aiResponse);
 
-      const filteredResult = this.filterIrrelevantTasks(transcript, result);
+      const filteredResult = this.filterIrrelevantTasks(cleanedTranscript, result);
 
       // Check if AI needs clarification
       if (filteredResult.needsClarification && filteredResult.clarificationQuestion) {
@@ -57,7 +60,7 @@ export class AiService {
     } catch (error) {
       this.logger.error('Failed to extract tasks from transcript', error);
       // Fallback: Create a single task if AI fails
-      return this.createFallbackTask(transcript);
+      return this.createFallbackTask(this.sanitizeTranscript(transcript));
     }
   }
 
@@ -88,8 +91,10 @@ INSTRUCTIONS:
    - Priority level (low, medium, high, or urgent)
    - Relevant tags (e.g., bug, feature, implement, design, api, authentication)
    - Due date if mentioned (ISO format YYYY-MM-DD)
+5. Keep the original product or domain wording (e.g., "User Service", "Driver Service", "trip", "wallet") that appears in the transcript. Correct obvious speech-to-text mistakes, but never invent features that were not mentioned.
+6. The description must restate the key nouns and expectations from the transcript (no boilerplate text like "Need a detailed description...").
 
-5. Return ONLY valid JSON in ONE of these formats:
+7. Return ONLY valid JSON in ONE of these formats:
 
 IF TASKS ARE CLEAR:
 {
@@ -115,6 +120,28 @@ IF THERE ARE NO SOFTWARE TASKS:
 {
   "tasks": [],
   "message": "Explain briefly why no tasks were generated"
+}
+
+REFERENCE EXAMPLE:
+Transcript: "On user service I need to create and cancel trips. On driver service I should be able to accept or cancel trips."
+Response:
+{
+  "tasks": [
+    {
+      "title": "User Service: create/cancel trips",
+      "description": "Implement endpoints that let riders create a trip request and cancel it before it is accepted.",
+      "priority": "high",
+      "tags": ["api", "user-service", "trip"],
+      "dueDate": null
+    },
+    {
+      "title": "Driver Service: accept/cancel trips",
+      "description": "Update the driver workflow so drivers can accept assigned trips and cancel them when necessary with a reason.",
+      "priority": "high",
+      "tags": ["driver-service", "workflow"],
+      "dueDate": null
+    }
+  ]
 }
 
 RESPONSE (JSON ONLY):`;
@@ -200,14 +227,22 @@ RESPONSE (JSON ONLY):`;
       return result;
     }
 
-    const relevantTasks = (result.tasks || []).filter((task) => this.isTaskRelevant(task));
-    const transcriptRelevant = this.containsEngineeringKeywords(transcript);
+    const tasks = result.tasks || [];
+    const relevantTasks = tasks.filter((task) => this.isTaskRelevant(task));
+    const transcriptHasContext = this.containsEngineeringKeywords(transcript) || this.hasActionableLanguage(transcript);
 
-    if (relevantTasks.length === 0 || !transcriptRelevant) {
+    if (relevantTasks.length === 0 && !transcriptHasContext) {
       return {
         ...result,
         tasks: [],
         message: result.message || 'No actionable software tasks detected. Please describe a bug, feature, or engineering change.',
+      };
+    }
+
+    if (relevantTasks.length === 0) {
+      return {
+        ...result,
+        tasks,
       };
     }
 
@@ -223,9 +258,19 @@ RESPONSE (JSON ONLY):`;
       'bug', 'deploy', 'api', 'endpoint', 'feature', 'issue', 'ticket', 'code', 'refactor',
       'frontend', 'backend', 'database', 'query', 'ui', 'ux', 'android', 'ios', 'expo',
       'react', 'nest', 'server', 'integration', 'authentication', 'login', 'task', 'sprint',
-      'release', 'test', 'coverage', 'unit test'
+      'release', 'test', 'coverage', 'unit test', 'service', 'trip', 'driver', 'wallet',
+      'payment', 'booking', 'dispatch', 'microservice', 'workflow'
     ];
     return keywords.some((keyword) => normalized.includes(keyword));
+  }
+
+  private hasActionableLanguage(text: string): boolean {
+    const normalized = text.toLowerCase();
+    const actionVerbs = ['create', 'add', 'update', 'cancel', 'accept', 'implement', 'build', 'enable', 'support', 'optimize', 'schedule', 'assign'];
+    const domainNouns = ['service', 'trip', 'driver', 'rider', 'wallet', 'payment', 'transaction', 'report', 'notification', 'workflow'];
+    const hasVerb = actionVerbs.some((verb) => normalized.includes(`${verb} `));
+    const hasDomainWord = domainNouns.some((noun) => normalized.includes(noun));
+    return hasVerb && hasDomainWord;
   }
 
   private isTaskRelevant(task: ExtractedTask): boolean {
@@ -241,6 +286,44 @@ RESPONSE (JSON ONLY):`;
     ];
 
     return keywords.some((keyword) => text.includes(keyword));
+  }
+
+  private sanitizeTranscript(text: string): string {
+    if (!text) {
+      return '';
+    }
+
+    const replacements: Array<{ pattern: RegExp; replacement: string }> = [
+      { pattern: /\bon reverse\b/gi, replacement: 'on driver service' },
+      { pattern: /\breverse\b/gi, replacement: 'driver service' },
+      { pattern: /\bwider(?=\s+(transaction|wallet))/gi, replacement: 'user' },
+      { pattern: /\bE3\b/gi, replacement: 'it' },
+    ];
+
+    let cleaned = text;
+    replacements.forEach(({ pattern, replacement }) => {
+      cleaned = cleaned.replace(pattern, replacement);
+    });
+
+    return cleaned.replace(/\s+/g, ' ').trim();
+  }
+
+  private normalizeConversationHistory(
+    history?: Array<{ role: 'user' | 'ai'; content: string }>
+  ): Array<{ role: 'user' | 'ai'; content: string }> | undefined {
+    if (!history || history.length === 0) {
+      return history;
+    }
+
+    return history.map((message) => {
+      if (message.role === 'user') {
+        return {
+          ...message,
+          content: this.sanitizeTranscript(message.content),
+        };
+      }
+      return message;
+    });
   }
 
   private createFallbackTask(transcript: string): TaskExtractionResponse {
@@ -274,6 +357,11 @@ RESPONSE (JSON ONLY):`;
       'database': 'database',
       'test': 'testing',
       'deploy': 'deployment',
+      'trip': 'trip',
+      'driver': 'driver',
+      'service': 'service',
+      'payment': 'payment',
+      'transaction': 'transaction',
     };
     
     Object.keys(tagMap).forEach(keyword => {
