@@ -30,19 +30,42 @@ export default function RecordTaskScreen() {
   const [isInClarificationMode, setIsInClarificationMode] = useState(false);
   const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(null);
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'ai', content: string}>>([]);
-      setTranscript('');
-      setInterimTranscript('');
-  const joinTranscriptParts = useCallback((...parts: string[]) => {
-    return parts
-      .filter((part) => !!part && part.trim().length > 0)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }, []);
+
+  const interimTranscriptRef = useRef('');
+  useEffect(() => {
+    interimTranscriptRef.current = interimTranscript;
+  }, [interimTranscript]);
+
+  const normalizeText = useCallback((text: string) => text?.replace(/\s+/g, ' ').trim() ?? '', []);
+
+  const mergeTranscript = useCallback((existing: string, incoming: string) => {
+    const current = normalizeText(existing);
+    const next = normalizeText(incoming);
+
+    if (!next) {
+      return current;
+    }
+    if (!current) {
+      return next;
+    }
+    if (next.startsWith(current)) {
+      return next;
+    }
+    if (current.endsWith(next)) {
+      return current;
+    }
+    return normalizeText(`${current} ${next}`);
+  }, [normalizeText]);
 
   const displayedTranscript = useMemo(() => {
-    return joinTranscriptParts(transcript, isRecording ? interimTranscript : '');
-  }, [interimTranscript, isRecording, joinTranscriptParts, transcript]);
+    const parts = [transcript, isRecording ? interimTranscript : '']
+      .map((part) => normalizeText(part || ''))
+      .filter((part) => part.length > 0);
+    if (parts.length === 0) {
+      return '';
+    }
+    return normalizeText(parts.join(' '));
+  }, [interimTranscript, isRecording, normalizeText, transcript]);
 
   const hasTranscriptContent = displayedTranscript.length > 0;
 
@@ -169,12 +192,12 @@ export default function RecordTaskScreen() {
     }
 
     if (isFinalResult) {
-      setTranscript((prev) => joinTranscriptParts(prev, latestTranscript));
+      setTranscript((prev) => mergeTranscript(prev, latestTranscript));
       setInterimTranscript('');
     } else {
       setInterimTranscript(latestTranscript);
     }
-  }, [joinTranscriptParts]);
+  }, [mergeTranscript]);
 
   const handleErrorEvent = useCallback((event: any) => {
     if (!event) {
@@ -199,9 +222,9 @@ export default function RecordTaskScreen() {
 
   const handleEndEvent = useCallback(() => {
     setIsRecording(false);
-    setTranscript((prev) => joinTranscriptParts(prev, interimTranscript));
+    setTranscript((prev) => mergeTranscript(prev, interimTranscriptRef.current));
     setInterimTranscript('');
-  }, [interimTranscript, joinTranscriptParts]);
+  }, [mergeTranscript]);
 
   useEffect(() => {
     if (
@@ -365,10 +388,11 @@ export default function RecordTaskScreen() {
         await ExpoSpeechRecognitionModule.stop();
       }
       setIsRecording(false);
-      setTranscript((prev) => joinTranscriptParts(prev, interimTranscript));
+      const mergedTranscript = mergeTranscript(transcript, interimTranscriptRef.current);
+      setTranscript(mergedTranscript);
       setInterimTranscript('');
       
-      if (transcript.trim()) {
+      if (mergedTranscript) {
         setIsEditing(true);
       }
     } catch (error: any) {
@@ -378,19 +402,17 @@ export default function RecordTaskScreen() {
   };
 
   const handleSendToAI = () => {
-    const finalizedTranscript = joinTranscriptParts(transcript, interimTranscript);
+    const finalizedTranscript = normalizeText(transcript || displayedTranscript);
     if (!finalizedTranscript) {
       Alert.alert('Error', 'Please record or type something first');
       return;
     }
-    setTranscript(finalizedTranscript);
-    setInterimTranscript('');
     setIsEditing(false);
     processTranscriptWithAI(finalizedTranscript);
   };
 
   const processTranscriptWithAI = async (inputTranscript?: string) => {
-    const transcriptToProcess = (inputTranscript ?? transcript).trim();
+    const transcriptToProcess = normalizeText(inputTranscript ?? transcript);
     if (!transcriptToProcess) {
       Alert.alert('Error', 'Transcript is empty. Please record again.');
       return;
