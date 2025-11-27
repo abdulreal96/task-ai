@@ -26,6 +26,9 @@ export default function RecordTaskScreen() {
     );
   });
   const [speechServicePackage, setSpeechServicePackage] = useState<string | null>(null);
+  const [isInClarificationMode, setIsInClarificationMode] = useState(false);
+  const [clarificationQuestion, setClarificationQuestion] = useState<string | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'ai', content: string}>>([]);
 
   // Animation values using useRef
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -374,28 +377,62 @@ export default function RecordTaskScreen() {
       const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://task-ai.ilimtutor.com';
       const authToken = await getAuthToken();
       
+      // Build conversation context
+      const conversationContext = isInClarificationMode 
+        ? [
+            ...conversationHistory,
+            { role: 'user' as const, content: transcript }
+          ]
+        : [{ role: 'user' as const, content: transcript }];
+      
       const response = await fetch(`${API_URL}/ai/extract-tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify({ transcript: transcript }),
+        body: JSON.stringify({ 
+          transcript: transcript,
+          conversationHistory: conversationContext
+        }),
       });
 
       const data = await response.json();
+
+      // Check if AI needs clarification
+      if (data.needsClarification && data.clarificationQuestion) {
+        // AI is asking for more information
+        setConversationHistory(prev => [
+          ...prev,
+          { role: 'user', content: transcript },
+          { role: 'ai', content: data.clarificationQuestion }
+        ]);
+        setClarificationQuestion(data.clarificationQuestion);
+        setIsInClarificationMode(true);
+        setIsProcessing(false);
+        setTranscript(''); // Clear for next input
+        Alert.alert('Need More Information', data.clarificationQuestion);
+        return;
+      }
 
       if (data.success && data.tasks && data.tasks.length > 0) {
         // AI successfully extracted tasks
         setExtractedTasks(data.tasks);
         setIsProcessing(false);
         setShowConfirmation(true);
+        // Reset clarification mode
+        setIsInClarificationMode(false);
+        setClarificationQuestion(null);
+        setConversationHistory([]);
       } else {
         // AI failed or returned no tasks - use fallback
         const fallbackTasks = extractTasksFromTranscript(transcript);
         setExtractedTasks(fallbackTasks);
         setIsProcessing(false);
         setShowConfirmation(true);
+        setIsInClarificationMode(false);
+        setClarificationQuestion(null);
+        setConversationHistory([]);
         
         if (!data.success) {
           Alert.alert('AI Processing', 'Using fallback task extraction. ' + (data.message || ''));
@@ -408,6 +445,9 @@ export default function RecordTaskScreen() {
       setExtractedTasks(fallbackTasks);
       setIsProcessing(false);
       setShowConfirmation(true);
+      setIsInClarificationMode(false);
+      setClarificationQuestion(null);
+      setConversationHistory([]);
       Alert.alert('Network Error', 'Could not reach AI server. Using basic extraction.');
     }
   };
@@ -553,9 +593,28 @@ export default function RecordTaskScreen() {
             <Text style={styles.subText}>
               {isRecording 
                 ? 'Tap the button to stop recording' 
+                : isInClarificationMode && clarificationQuestion
+                ? clarificationQuestion
                 : 'Tell me what you need to do and I\'ll organize it for you'
               }
             </Text>
+
+            {/* Show conversation history in clarification mode */}
+            {isInClarificationMode && conversationHistory.length > 0 && (
+              <View style={[styles.conversationCard, { backgroundColor: isDarkMode ? '#1f2937' : '#f9fafb' }]}>
+                <Text style={[styles.conversationTitle, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>Conversation:</Text>
+                {conversationHistory.map((msg, idx) => (
+                  <View key={idx} style={styles.conversationMessage}>
+                    <Text style={[styles.conversationRole, { color: msg.role === 'user' ? '#2563eb' : '#16a34a' }]}>
+                      {msg.role === 'user' ? 'You' : 'AI'}:
+                    </Text>
+                    <Text style={[styles.conversationText, { color: isDarkMode ? '#e5e7eb' : '#374151' }]}>
+                      {msg.content}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Live Transcript */}
             {transcript && (
@@ -789,6 +848,32 @@ const styles = StyleSheet.create({
     maxHeight: 300,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  conversationCard: {
+    marginTop: 24,
+    borderRadius: 12,
+    padding: 16,
+    maxWidth: 400,
+    maxHeight: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  conversationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  conversationMessage: {
+    marginBottom: 8,
+  },
+  conversationRole: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  conversationText: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   transcriptText: {
     fontSize: 14,

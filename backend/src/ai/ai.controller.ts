@@ -4,6 +4,7 @@ import { AiService, ExtractedTask } from './ai.service';
 
 class ExtractTasksDto {
   transcript: string;
+  conversationHistory?: Array<{role: 'user' | 'ai', content: string}>;
 }
 
 @Controller('ai')
@@ -17,9 +18,11 @@ export class AiController {
     success: boolean;
     message: string;
     tasks: ExtractedTask[];
+    needsClarification?: boolean;
+    clarificationQuestion?: string;
     error?: string;
   }> {
-    const { transcript } = extractTasksDto;
+    const { transcript, conversationHistory } = extractTasksDto;
     
     if (!transcript || transcript.trim().length === 0) {
       return {
@@ -30,8 +33,19 @@ export class AiController {
     }
 
     try {
-      const result = await this.aiService.extractTasksFromTranscript(transcript);
+      const result = await this.aiService.extractTasksFromTranscript(transcript, conversationHistory);
       
+      // If AI needs clarification
+      if (result.needsClarification && result.clarificationQuestion) {
+        return {
+          success: true,
+          message: 'AI needs more information',
+          tasks: [],
+          needsClarification: true,
+          clarificationQuestion: result.clarificationQuestion
+        };
+      }
+
       return {
         success: true,
         message: `Successfully extracted ${result.tasks.length} task(s)`,
