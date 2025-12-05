@@ -32,9 +32,6 @@ export class Task {
   @Prop()
   dueDate?: Date;
 
-  @Prop({ type: [String], default: [] })
-  tags: string[];
-
   @Prop({ default: 0 })
   timeSpent: number; // in seconds
 
@@ -59,4 +56,3 @@ export const TaskSchema = SchemaFactory.createForClass(Task);
 // Indexes for better query performance
 TaskSchema.index({ userId: 1, status: 1 });
 TaskSchema.index({ userId: 1, dueDate: 1 });
-TaskSchema.index({ userId: 1, tags: 1 });

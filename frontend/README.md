@@ -87,7 +87,7 @@ frontend/
     └── screens/
         ├── DashboardScreen.tsx    # Home dashboard
         ├── TaskBoardScreen.tsx    # Task kanban board
-        ├── RecordTaskScreen.tsx   # Voice/manual task creation
+        ├── RecordTaskWithLiveKitScreen.tsx   # AI assistant powered capture
         ├── ReportsScreen.tsx      # Analytics and reports
         └── SettingsScreen.tsx     # App settings
 ```
@@ -105,11 +105,11 @@ frontend/
 - Task detail modal with activity log
 - Status update and task deletion
 
-### Record Task
-- Voice recording button for AI-powered task creation
-- Manual input form with title, description, and tags
-- Quick tag selection
-- Form validation
+### AI Assistant
+- LiveKit-powered bi-directional voice conversations
+- Real-time AI summaries before saving tasks
+- Project-aware task enrichment
+- Confirmation workflow before persisting
 
 ### Reports
 - Period selector (Week, Month, Year)

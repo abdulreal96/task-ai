@@ -8,7 +8,6 @@ export interface Task {
   status: 'todo' | 'in-progress' | 'completed';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   dueDate?: Date | string;
-  tags: string[];
   timeSpent: number;
   timerStatus?: 'stopped' | 'running' | 'paused';
   timerStartedAt?: string;
@@ -54,8 +53,4 @@ export const taskService = {
     return response.data;
   },
 
-  async getTasksByTag(tag: string): Promise<Task[]> {
-    const response = await api.get(`/tasks/tag/${tag}`);
-    return response.data;
-  },
 };

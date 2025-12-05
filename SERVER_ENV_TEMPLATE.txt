@@ -20,5 +20,19 @@ AI_AGENT_URL=http://localhost:11434
 AI_AGENT_MODEL=qwen2.5:0.5b-instruct
 AI_AGENT_API_KEY=
 
+# LiveKit Configuration (for conversational AI)
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_WS_URL=wss://your-project.livekit.cloud
+LIVEKIT_HTTP_URL=https://your-project.livekit.cloud
+LIVEKIT_AGENT_NAME=task-ai-agent
+LIVEKIT_LLM_MODEL=openai/gpt-4o-mini
+LIVEKIT_STT_MODEL=deepgram/nova-2-general:en
+LIVEKIT_TTS_MODEL=cartesia/sonic
+LIVEKIT_AGENT_LOG_LEVEL=info
+
+# Agent Task API (used by the worker when calling backend endpoints)
+AGENT_TASK_API_URL=http://localhost:3000
+
 # CORS
 CORS_ORIGIN=*

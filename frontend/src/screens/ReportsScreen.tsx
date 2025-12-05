@@ -54,21 +54,6 @@ export default function ReportsScreen() {
 
   const totalTasks = statusData.reduce((acc, item) => acc + item.value, 0);
 
-  // Tag Distribution
-  const tagCounts: { [key: string]: number } = {};
-  tasks.forEach(task => {
-    task.tags.forEach(tag => {
-      tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-    });
-  });
-
-  const tagData = Object.entries(tagCounts)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-
-  const maxTagCount = Math.max(...tagData.map(t => t.count), 1);
-
   // Daily Trend Data (last 7 days)
   const dailyTrendData = [];
   for (let i = 6; i >= 0; i--) {
@@ -184,24 +169,6 @@ export default function ReportsScreen() {
               </View>
             </View>
 
-            {/* Top Tags */}
-            <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.chartTitle, { color: colors.text }]}>Most Used Tags</Text>
-              <View style={styles.barChart}>
-                {tagData.map((item, index) => {
-                  const barWidth = (item.count / maxTagCount) * 100;
-                  return (
-                    <View key={index} style={styles.barItem}>
-                      <Text style={[styles.barLabel, { color: colors.textSecondary }]}>{item.name}</Text>
-                      <View style={[styles.barContainer, { backgroundColor: colors.background }]}>
-                        <View style={[styles.barFill, { width: `${barWidth}%`, backgroundColor: colors.primary }]} />
-                      </View>
-                      <Text style={[styles.barValue, { color: colors.text }]}>{item.count}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
           </>
         ) : (
           <>
@@ -295,14 +262,13 @@ export default function ReportsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   header: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
     paddingHorizontal: 24,
     paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   headerTitle: {
     fontSize: 24,
@@ -312,7 +278,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 14,
     color: '#6b7280',
-    marginTop: 2,
+    marginTop: 4,
   },
   tabsContainer: {
     flexDirection: 'row',

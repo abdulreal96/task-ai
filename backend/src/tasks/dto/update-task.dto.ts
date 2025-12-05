@@ -22,11 +22,6 @@ export class UpdateTaskDto {
   dueDate?: string;
 
   @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  tags?: string[];
-
-  @IsOptional()
   @IsString()
   projectId?: string;
 

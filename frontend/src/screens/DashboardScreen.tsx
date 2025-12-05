@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { Mic, ListTodo, BarChart3, Clock, CheckCircle2, TrendingUp } from 'lucide-react-native';
+import { ListTodo, BarChart3, Clock, CheckCircle2, TrendingUp, Edit3, Sparkles } from 'lucide-react-native';
 
 export default function DashboardScreen({ navigation }: any) {
   const { tasks } = useTasks();
@@ -79,11 +79,24 @@ export default function DashboardScreen({ navigation }: any) {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
           <View style={styles.quickActionsGrid}>
             <TouchableOpacity 
-              style={[styles.quickActionButton, styles.quickActionPrimary, { backgroundColor: colors.primary }]}
-              onPress={() => navigation.navigate('Record')}
+              style={[styles.quickActionButton, styles.quickActionFull, { backgroundColor: '#9333ea', borderColor: '#9333ea' }]}
+              onPress={() => navigation.navigate('RecordWithLiveKit')}
             >
-              <Mic color="#ffffff" size={32} />
-              <Text style={styles.quickActionTextPrimary}>Record Task</Text>
+              <View style={styles.quickActionFullContent}>
+                <Sparkles color="#ffffff" size={32} />
+                <View style={styles.quickActionFullText}>
+                  <Text style={styles.quickActionFullTitle}>AI Conversation</Text>
+                  <Text style={styles.quickActionDescription}>Tap once and let TaskMate capture everything for you.</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.quickActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => navigation.navigate('CreateTask')}
+            >
+              <Edit3 color={colors.text} size={32} />
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Manual Task</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -101,14 +114,6 @@ export default function DashboardScreen({ navigation }: any) {
               <BarChart3 color={colors.text} size={32} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>Reports</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickActionButton}
-              onPress={() => navigation.navigate('Tasks')}
-            >
-              <TrendingUp color="#000000" size={32} />
-              <Text style={styles.quickActionText}>Tags</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -125,11 +130,6 @@ export default function DashboardScreen({ navigation }: any) {
                 >
                   <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
                   <View style={styles.taskMeta}>
-                    {task.tags.slice(0, 3).map((tag: string, index: number) => (
-                      <View key={index} style={[styles.taskTag, { backgroundColor: isDarkMode ? '#1e3a8a' : '#dbeafe' }]}>
-                        <Text style={[styles.taskTagText, { color: isDarkMode ? '#93c5fd' : '#1e40af' }]}>{tag}</Text>
-                      </View>
-                    ))}
                     {task.timeSpent > 0 && (
                       <View style={styles.taskTime}>
                         <Clock size={12} color={colors.textSecondary} />
@@ -246,6 +246,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
+  quickActionFull: {
+    width: '100%',
+    minHeight: 110,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    alignItems: 'stretch',
+    gap: 0,
+  },
   quickActionButton: {
     width: '48%',
     height: 96,
@@ -256,6 +264,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  quickActionFullContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  quickActionFullText: {
+    flex: 1,
+  },
+  quickActionFullTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  quickActionDescription: {
+    fontSize: 13,
+    color: '#f3e8ff',
+    marginTop: 4,
+    lineHeight: 18,
   },
   quickActionPrimary: {
     backgroundColor: '#2563eb',

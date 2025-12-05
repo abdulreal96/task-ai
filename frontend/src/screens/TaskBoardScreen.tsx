@@ -256,8 +256,7 @@ export default function TaskBoardScreen({ navigation }: any) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(task => 
         task.title.toLowerCase().includes(query) || 
-        task.description?.toLowerCase().includes(query) ||
-        task.tags?.some(tag => tag.toLowerCase().includes(query))
+        task.description?.toLowerCase().includes(query)
       );
     }
     
@@ -406,9 +405,8 @@ export default function TaskBoardScreen({ navigation }: any) {
                 </TouchableOpacity>
               </View>
 
-              {/* Tags */}
-              <View style={styles.tagsRow}>
-                {/* Priority Badge - Clickable */}
+              {/* Priority */}
+              <View style={styles.metaRow}>
                 <TouchableOpacity 
                   style={[
                     styles.priorityBadge, 
@@ -426,17 +424,6 @@ export default function TaskBoardScreen({ navigation }: any) {
                     {getPriorityLabel(task.priority)}
                   </Text>
                 </TouchableOpacity>
-                
-                {task.tags?.slice(0, 2).map(tag => (
-                  <View key={tag} style={[styles.taskTag, { backgroundColor: isDarkMode ? '#1e3a8a' : '#dbeafe' }]}>
-                    <Text style={[styles.taskTagText, { color: isDarkMode ? '#93c5fd' : '#1e40af' }]}>{tag}</Text>
-                  </View>
-                ))}
-                {task.tags?.length > 2 && (
-                  <View style={[styles.taskTag, styles.taskTagMore]}>
-                    <Text style={styles.taskTagMoreText}>+{task.tags.length - 2}</Text>
-                  </View>
-                )}
               </View>
 
               {/* Due Date - Clickable */}
@@ -1284,11 +1271,37 @@ const styles = StyleSheet.create({
   moreButton: {
     padding: 4,
   },
-  tagsRow: {
+  metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
+  },
+  taskFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   priorityBadge: {
     paddingHorizontal: 10,
@@ -1300,46 +1313,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'capitalize',
-  },
-  taskTag: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  taskTagText: {
-    fontSize: 11,
-    color: '#374151',
-    fontWeight: '500',
-  },
-  taskTagMore: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  taskTagMoreText: {
-    fontSize: 11,
-    color: '#6b7280',
-  },
-  taskFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   timerButton: {
     flexDirection: 'row',

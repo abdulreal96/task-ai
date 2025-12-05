@@ -6,7 +6,6 @@ export interface ExtractedTask {
   title: string;
   description: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  tags: string[];
   dueDate?: string;
 }
 
@@ -89,7 +88,6 @@ INSTRUCTIONS:
    - A clear, concise title (max 60 characters)
    - A detailed description
    - Priority level (low, medium, high, or urgent)
-   - Relevant tags (e.g., bug, feature, implement, design, api, authentication)
    - Due date if mentioned (ISO format YYYY-MM-DD)
 5. Keep the original product or domain wording (e.g., "User Service", "Driver Service", "trip", "wallet") that appears in the transcript. Correct obvious speech-to-text mistakes, but never invent features that were not mentioned.
 6. The description must restate the key nouns and expectations from the transcript (no boilerplate text like "Need a detailed description...").
@@ -103,7 +101,6 @@ IF TASKS ARE CLEAR:
       "title": "Task title here",
       "description": "Detailed description here",
       "priority": "medium",
-      "tags": ["tag1", "tag2"],
       "dueDate": "2025-11-30"
     }
   ]
@@ -131,14 +128,12 @@ Response:
       "title": "User Service: create/cancel trips",
       "description": "Implement endpoints that let riders create a trip request and cancel it before it is accepted.",
       "priority": "high",
-      "tags": ["api", "user-service", "trip"],
       "dueDate": null
     },
     {
       "title": "Driver Service: accept/cancel trips",
       "description": "Update the driver workflow so drivers can accept assigned trips and cancel them when necessary with a reason.",
       "priority": "high",
-      "tags": ["driver-service", "workflow"],
       "dueDate": null
     }
   ]
@@ -200,7 +195,6 @@ RESPONSE (JSON ONLY):`;
             title: task.title || 'Untitled Task',
             description: task.description || task.title || '',
             priority: this.validatePriority(task.priority),
-            tags: Array.isArray(task.tags) ? task.tags : [],
             dueDate: task.dueDate || undefined,
           })),
           message: parsed.message || parsed.reason,
@@ -274,7 +268,7 @@ RESPONSE (JSON ONLY):`;
   }
 
   private isTaskRelevant(task: ExtractedTask): boolean {
-    const text = `${task.title ?? ''} ${task.description ?? ''} ${(task.tags || []).join(' ')}`.toLowerCase();
+    const text = `${task.title ?? ''} ${task.description ?? ''}`.toLowerCase();
     if (!text.trim()) {
       return false;
     }
@@ -334,45 +328,7 @@ RESPONSE (JSON ONLY):`;
         title: transcript.substring(0, 60) + (transcript.length > 60 ? '...' : ''),
         description: transcript,
         priority: 'medium',
-        tags: this.extractBasicTags(transcript),
       }]
     };
-  }
-
-  private extractBasicTags(text: string): string[] {
-    const lowerText = text.toLowerCase();
-    const tags: string[] = [];
-    
-    const tagMap: { [key: string]: string } = {
-      'implement': 'implement',
-      'fix': 'fix',
-      'bug': 'bug',
-      'design': 'design',
-      'feature': 'feature',
-      'wallet': 'wallet',
-      'auth': 'authentication',
-      'login': 'authentication',
-      'dashboard': 'dashboard',
-      'api': 'api',
-      'database': 'database',
-      'test': 'testing',
-      'deploy': 'deployment',
-      'trip': 'trip',
-      'driver': 'driver',
-      'service': 'service',
-      'payment': 'payment',
-      'transaction': 'transaction',
-    };
-    
-    Object.keys(tagMap).forEach(keyword => {
-      if (lowerText.includes(keyword)) {
-        const tag = tagMap[keyword];
-        if (!tags.includes(tag)) {
-          tags.push(tag);
-        }
-      }
-    });
-    
-    return tags.length > 0 ? tags : ['general'];
   }
 }

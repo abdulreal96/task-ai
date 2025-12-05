@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform, Modal, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Mic, X, Check, Edit3, Send, Sparkles, ListChecks, PenTool } from 'lucide-react-native';
+import { Mic, X, Check, Edit3, Send, Sparkles, ListChecks, PenTool, MessageCircle } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import ProjectSelector from '../components/ProjectSelector';
+import Toast from '../components/Toast';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import livekitService, { ExtractedTask as LiveKitTask } from '../services/livekit';
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -18,7 +20,6 @@ type EditableExtractedTask = {
   title: string;
   description: string;
   priority: PriorityLevel;
-  tags: string[];
   dueDate: string;
   status: TaskStatus;
   projectId?: string;
@@ -57,6 +58,18 @@ export default function RecordTaskScreen() {
   const processingGlowAnim = useRef(new Animated.Value(0)).current;
   const [processingDots, setProcessingDots] = useState('.');
   const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' | 'warning' | 'info' });
+  
+  // LiveKit AI Assistant state
+  const [isAiMode, setIsAiMode] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [aiStatus, setAiStatus] = useState<string>('');
+  const [aiTranscript, setAiTranscript] = useState<string>('');
+  const [conversationMessages, setConversationMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setToast({ visible: true, message, type });
+  };
 
   const formatDateInput = useCallback((value?: string | Date) => {
     if (!value) {
@@ -74,9 +87,6 @@ export default function RecordTaskScreen() {
       title: (task?.title || '').trim() || 'Untitled Task',
       description: (task?.description || '').trim(),
       priority: PRIORITY_OPTIONS.includes(task?.priority) ? task.priority : 'medium',
-      tags: Array.isArray(task?.tags)
-        ? task.tags.filter(Boolean).map((tag: string) => tag.trim()).filter(Boolean)
-        : [],
       dueDate: formatDateInput(task?.dueDate) ?? '',
       status: task?.status && STATUS_OPTIONS.includes(task.status)
         ? task.status
@@ -91,17 +101,6 @@ export default function RecordTaskScreen() {
       prev.map((task, taskIndex) => {
         if (taskIndex !== index) {
           return task;
-        }
-
-        if (field === 'tags') {
-          const tagString = typeof value === 'string' ? value : Array.isArray(value) ? value.join(',') : '';
-          return {
-            ...task,
-            tags: tagString
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter(Boolean),
-          };
         }
 
         if (field === 'dueDate') {
@@ -236,10 +235,7 @@ export default function RecordTaskScreen() {
     setIsSpeechModuleReady(ready);
 
     if (!ready) {
-      Alert.alert(
-        "Configuration Error",
-        "Speech recognition is unavailable on this build. Please uninstall the app, install the latest EAS build, and try again."
-      );
+      showToast("Speech recognition is unavailable on this build. Please install the latest build.", 'error');
       return;
     }
 
@@ -281,10 +277,7 @@ export default function RecordTaskScreen() {
       }
 
       console.warn("[Speech] No speech services found on device");
-      Alert.alert(
-        "Speech Service Required",
-        "No speech recognition service found. Please install 'Speech Services by Google' from the Play Store."
-      );
+      showToast("No speech recognition service found. Please install 'Speech Services by Google' from the Play Store.", 'error');
     } catch (error) {
       console.error("[Speech] Service detection error:", error);
     }
@@ -315,16 +308,12 @@ export default function RecordTaskScreen() {
         setHasPermission(requestResult.granted);
         
         if (!requestResult.granted) {
-          Alert.alert(
-            "Permission Required",
-            "Microphone permission is required for voice recording. Please enable it in your device settings.",
-            [{ text: "OK" }]
-          );
+          showToast("Microphone permission is required for voice recording. Please enable it in your device settings.", 'error');
         }
       }
     } catch (error: any) {
       console.error("Permission check failed:", error);
-      Alert.alert("Error", "Failed to check permissions: " + error.message);
+      showToast("Failed to check permissions: " + error.message, 'error');
     }
   };
 
@@ -368,7 +357,7 @@ export default function RecordTaskScreen() {
     const message = event.message || event.error || "Unknown error occurred";
     setRecognitionError(message);
     setIsRecording(false);
-    Alert.alert("Speech Recognition Error", message);
+    showToast('message', 'error');
   }, []);
 
   const handleEndEvent = useCallback(() => {
@@ -514,10 +503,7 @@ export default function RecordTaskScreen() {
         typeof ExpoSpeechRecognitionModule.requestPermissionsAsync !== "function" ||
         typeof ExpoSpeechRecognitionModule.start !== "function"
       ) {
-        Alert.alert(
-          "Configuration Error",
-          "Speech recognition is unavailable. Please reinstall the latest build before recording."
-        );
+        showToast("Speech recognition is unavailable. Please reinstall the latest build before recording.", 'error');
         return;
       }
 
@@ -529,20 +515,14 @@ export default function RecordTaskScreen() {
       
       // Check permission first
       if (hasPermission === false) {
-        Alert.alert(
-          "Permission Required",
-          "Please enable microphone permission in your device settings to use voice recording."
-        );
+        showToast("Please enable microphone permission in your device settings to use voice recording.", 'error');
         return;
       }
 
       // Request permissions again if not sure
       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) {
-        Alert.alert(
-          "Permission Denied",
-          "Microphone permission is required for voice recording. Please enable it in your device settings."
-        );
+        showToast("Microphone permission is required for voice recording. Please enable it in your device settings.", 'error');
         setHasPermission(false);
         return;
       }
@@ -580,7 +560,7 @@ export default function RecordTaskScreen() {
       setIsRecording(true);
     } catch (error: any) {
       console.error("Failed to start recording:", error);
-      Alert.alert("Error", "Failed to start speech recognition: " + error.message);
+      showToast("Failed to start speech recognition: " + error.message, 'error');
     }
   };
 
@@ -609,7 +589,7 @@ export default function RecordTaskScreen() {
   const handleSendToAI = () => {
     const finalizedTranscript = normalizeText(transcript || displayedTranscript);
     if (!finalizedTranscript) {
-      Alert.alert('Error', 'Please record or type something first');
+      showToast('Please record or type something first', 'error');
       return;
     }
     setTranscript(finalizedTranscript);
@@ -621,7 +601,7 @@ export default function RecordTaskScreen() {
   const processTranscriptWithAI = async (inputTranscript?: string) => {
     const transcriptToProcess = normalizeText(inputTranscript ?? transcript);
     if (!transcriptToProcess) {
-      Alert.alert('Error', 'Transcript is empty. Please record again.');
+      showToast('Transcript is empty. Please record again.', 'error');
       return;
     }
 
@@ -671,7 +651,7 @@ export default function RecordTaskScreen() {
         setIsProcessing(false);
         setTranscript(''); // Clear for next input
         setInterimTranscript('');
-        Alert.alert('Need More Information', data.clarificationQuestion);
+        showToast('data.clarificationQuestion', 'error');
         return;
       }
 
@@ -705,7 +685,7 @@ export default function RecordTaskScreen() {
         setConversationHistory([]);
         
         if (!data.success) {
-          Alert.alert('AI Processing', 'Using fallback task extraction. ' + (data.message || ''));
+          showToast('Using fallback task extraction. ' + (data.message || ''), 'warning');
         }
       }
     } catch (error: any) {
@@ -719,7 +699,7 @@ export default function RecordTaskScreen() {
       setIsInClarificationMode(false);
       setClarificationQuestion(null);
       setConversationHistory([]);
-      Alert.alert('Network Error', 'Could not reach AI server. Using basic extraction.');
+      showToast('Could not reach AI server. Using basic extraction.', 'error');
     }
   };
 
@@ -750,39 +730,95 @@ export default function RecordTaskScreen() {
         title: text.slice(0, 50) + (text.length > 50 ? '...' : ''),
         description: text,
         priority: 'medium',
-        tags: extractTags(text),
         dueDate: '',
         status: 'todo',
       }
     ];
   };
 
-  const extractTags = (text: string): string[] => {
-    const lowerText = text.toLowerCase();
-    const tags: string[] = [];
-    
-    const tagMap: { [key: string]: string } = {
-      'implement': 'implement',
-      'fix': 'fix',
-      'bug': 'bug',
-      'design': 'design',
-      'wallet': 'wallet',
-      'auth': 'authentication',
-      'login': 'authentication',
-      'dashboard': 'dashboard',
-      'api': 'api',
-      'database': 'database'
-    };
-    
-    Object.keys(tagMap).forEach(keyword => {
-      if (lowerText.includes(keyword)) {
-        if (!tags.includes(tagMap[keyword])) {
-          tags.push(tagMap[keyword]);
-        }
-      }
-    });
-    
-    return tags.length > 0 ? tags : ['general'];
+  // LiveKit AI Assistant handlers
+  const startAiConversation = async () => {
+    try {
+      setIsConnecting(true);
+      setAiStatus('Connecting to AI assistant...');
+      
+      // Connect to LiveKit room
+      await livekitService.connect({
+        roomName: `task-assistant-${Date.now()}`,
+        participantName: 'User',
+      });
+
+      // Setup callbacks
+      livekitService.onStatusChange((status) => {
+        setAiStatus(status);
+      });
+
+      livekitService.onTranscript((text) => {
+        setAiTranscript(text);
+        setConversationMessages(prev => [...prev, { role: 'assistant', content: text }]);
+      });
+
+      livekitService.onTasksExtracted((tasks) => {
+        // Convert LiveKit tasks to our format
+        const convertedTasks: EditableExtractedTask[] = tasks.map(task => ({
+          title: task.title,
+          description: task.description || '',
+          priority: task.priority,
+          dueDate: task.dueDate || '',
+          status: 'todo',
+          projectId: task.project,
+        }));
+        
+        setExtractedTasks(normalizeExtractedTaskList(convertedTasks));
+        setShowConfirmation(true);
+        setIsAiMode(false);
+      });
+
+      setIsAiMode(true);
+      setIsConnecting(false);
+      showToast('Connected! Start speaking to the AI assistant', 'success');
+    } catch (error: any) {
+      console.error('Failed to start AI conversation:', error);
+      setIsConnecting(false);
+      setIsAiMode(false);
+      showToast(`Failed to connect: ${error.message}`, 'error');
+    }
+  };
+
+  const stopAiConversation = async () => {
+    try {
+      await livekitService.disconnect();
+      setIsAiMode(false);
+      setAiStatus('');
+      setAiTranscript('');
+      setConversationMessages([]);
+      showToast('Disconnected from AI assistant', 'info');
+    } catch (error: any) {
+      console.error('Failed to disconnect:', error);
+      showToast('Disconnect failed', 'error');
+    }
+  };
+
+  const confirmAiTasks = async () => {
+    try {
+      await livekitService.confirmTasks(true);
+      await confirmTasks();
+    } catch (error: any) {
+      console.error('Failed to confirm tasks:', error);
+      showToast('Failed to confirm tasks', 'error');
+    }
+  };
+
+  const rejectAiTasks = async () => {
+    try {
+      await livekitService.confirmTasks(false);
+      setExtractedTasks([]);
+      setShowConfirmation(false);
+      showToast('Tasks rejected. Continue speaking to the AI.', 'info');
+    } catch (error: any) {
+      console.error('Failed to reject tasks:', error);
+      showToast('Failed to reject tasks', 'error');
+    }
   };
 
   const confirmTasks = async () => {
@@ -792,12 +828,10 @@ export default function RecordTaskScreen() {
         // Ensure all required fields are present with proper defaults
         const parsedDueDate = taskData.dueDate ? new Date(taskData.dueDate) : undefined;
         const validDueDate = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate : undefined;
-        const tags = Array.isArray(taskData.tags) ? taskData.tags.filter(Boolean) : [];
 
         const taskToSave: any = {
           title: taskData.title || 'Untitled Task',
           description: taskData.description || taskData.title || '',
-          tags: tags.length > 0 ? tags : ['general'],
           status: (taskData.status && STATUS_OPTIONS.includes(taskData.status)
             ? taskData.status
             : 'todo') as TaskStatus,
@@ -822,10 +856,10 @@ export default function RecordTaskScreen() {
       setExtractedTasks([]);
       setShowConfirmation(false);
       setAiMessage(null);
-      Alert.alert('Success', `${extractedTasks.length} task(s) saved successfully`);
+      showToast(`${extractedTasks.length} task(s) saved successfully`, 'success');
     } catch (error: any) {
       console.error('Failed to save tasks:', error);
-      Alert.alert('Error', `Failed to save tasks: ${error.message || 'Please try again.'}`);
+      showToast(`Failed to save tasks: ${error.message || 'Please try again.'}`, 'error');
     }
   };
 
@@ -838,13 +872,69 @@ export default function RecordTaskScreen() {
         <TouchableOpacity style={styles.closeButton}>
           <X size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Record Task</Text>
+        <Text style={styles.headerTitle}>AI Assistant</Text>
         <View style={{ width: 40 }} />
       </View>
 
+      {/* Mode Toggle */}
+      <View style={styles.modeToggleContainer}>
+        <TouchableOpacity 
+          style={[styles.modeButton, !isAiMode && styles.modeButtonActive]}
+          onPress={() => { if (isAiMode) stopAiConversation(); }}
+        >
+          <Mic size={20} color={!isAiMode ? '#ffffff' : '#9ca3af'} />
+          <Text style={[styles.modeButtonText, !isAiMode && styles.modeButtonTextActive]}>Voice Recording</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.modeButton, isAiMode && styles.modeButtonActive]}
+          onPress={startAiConversation}
+          disabled={isConnecting}
+        >
+          <MessageCircle size={20} color={isAiMode ? '#ffffff' : '#9ca3af'} />
+          <Text style={[styles.modeButtonText, isAiMode && styles.modeButtonTextActive]}>
+            {isConnecting ? 'Connecting...' : 'AI Conversation'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* AI Status */}
+      {isAiMode && aiStatus && (
+        <View style={[styles.aiStatusBar, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }]}>
+          <Sparkles size={16} color="#10b981" />
+          <Text style={[styles.aiStatusText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>{aiStatus}</Text>
+        </View>
+      )}
+
+      {/* AI Conversation View */}
+      {isAiMode && (
+        <ScrollView style={styles.conversationView}>
+          {conversationMessages.map((msg, idx) => (
+            <View key={idx} style={[
+              styles.messageBox,
+              msg.role === 'user' ? styles.userMessage : styles.assistantMessage,
+              { backgroundColor: msg.role === 'user' ? '#2563eb' : (isDarkMode ? '#1f2937' : '#f3f4f6') }
+            ]}>
+              <Text style={[
+                styles.messageText,
+                { color: msg.role === 'user' ? '#ffffff' : (isDarkMode ? '#f9fafb' : '#111827') }
+              ]}>
+                {msg.content}
+              </Text>
+            </View>
+          ))}
+          {aiTranscript && (
+            <View style={[styles.messageBox, styles.assistantMessage, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }]}>
+              <Text style={[styles.messageText, { color: isDarkMode ? '#f9fafb' : '#111827', fontStyle: 'italic' }]}>
+                {aiTranscript}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
+
       {/* Recording Area */}
       <View style={styles.recordingArea}>
-        {!isProcessing && !showConfirmation && (
+        {!isProcessing && !showConfirmation && !isAiMode && (
           <>
             {/* Microphone Button */}
             <Animated.View style={[styles.micContainer, { transform: [{ scale: pulseAnim }] }]}>
@@ -1115,15 +1205,6 @@ export default function RecordTaskScreen() {
                       ) : null}
                     </View>
 
-                    <Text style={styles.editLabel}>Tags (comma separated)</Text>
-                    <TextInput
-                      style={[styles.editableInput, { color: editableTextColor }]}
-                      placeholder="e.g. auth, api, dashboard"
-                      placeholderTextColor="#94a3b8"
-                      value={task.tags.join(', ')}
-                      onChangeText={(value) => updateExtractedTaskField(index, 'tags', value)}
-                    />
-
                     <Text style={styles.editLabel}>Project (optional)</Text>
                     <ProjectSelector
                       selectedProjectId={task.projectId}
@@ -1181,6 +1262,14 @@ export default function RecordTaskScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Toast Notification */}
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1570,22 +1659,6 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
     color: '#111827',
   },
-  extractedTaskTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  extractedTag: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  extractedTagText: {
-    fontSize: 11,
-    color: '#1e40af',
-    fontWeight: '500',
-  },
   editLabel: {
     fontSize: 12,
     fontWeight: '600',
@@ -1723,4 +1796,66 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
+  // LiveKit AI Assistant styles
+  modeToggleContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    gap: 8,
+  },
+  modeButtonActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  modeButtonTextActive: {
+    color: '#ffffff',
+  },
+  aiStatusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  aiStatusText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  conversationView: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  messageBox: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 10,
+    maxWidth: '80%',
+  },
+  userMessage: {
+    alignSelf: 'flex-end',
+  },
+  assistantMessage: {
+    alignSelf: 'flex-start',
+  },
+  messageText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
 });
+
