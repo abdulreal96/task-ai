@@ -14,6 +14,9 @@ export class Task {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Project' })
+  projectId?: Types.ObjectId;
+
   @Prop({ required: true })
   title: string;
 

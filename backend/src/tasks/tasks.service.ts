@@ -1,20 +1,35 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Task, TaskDocument } from '../schemas/task.schema';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { ProjectsService } from '../projects/projects.service';
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectModel(Task.name) private taskModel: Model<TaskDocument>,
+    private projectsService: ProjectsService,
   ) {}
 
   async create(userId: string, createTaskDto: CreateTaskDto): Promise<TaskDocument> {
+    let projectId: Types.ObjectId | undefined;
+
+    // Handle project linking: either use existing projectId or create new project by name
+    if (createTaskDto.projectId) {
+      projectId = new Types.ObjectId(createTaskDto.projectId);
+    } else if (createTaskDto.projectName) {
+      const project = await this.projectsService.findOrCreate(userId, createTaskDto.projectName);
+      projectId = project._id as Types.ObjectId;
+    }
+
+    const { projectId: _projectId, projectName: _projectName, ...taskData } = createTaskDto;
+
     const task = new this.taskModel({
-      ...createTaskDto,
+      ...taskData,
       userId,
+      ...(projectId && { projectId }),
       activities: [{
         type: 'created',
         timestamp: new Date(),
@@ -46,6 +61,15 @@ export class TasksService {
     // Store the activities array if provided, or keep existing
     const providedActivities = updateTaskDto.activities;
     
+    // Handle project linking updates
+    let projectId: Types.ObjectId | undefined;
+    if (updateTaskDto.projectId !== undefined) {
+      projectId = updateTaskDto.projectId ? new Types.ObjectId(updateTaskDto.projectId) : undefined;
+    } else if (updateTaskDto.projectName) {
+      const project = await this.projectsService.findOrCreate(userId, updateTaskDto.projectName);
+      projectId = project._id as Types.ObjectId;
+    }
+
     // Handle timer start
     if (updateTaskDto.timerStatus === 'running' && task.timerStatus !== 'running') {
       task.timerStartedAt = new Date();
@@ -81,13 +105,18 @@ export class TasksService {
       });
     }
 
-    // Update fields (excluding activities and timer fields we already handled) - only update defined fields
-    const { activities, timerStatus, timerStartedAt, ...otherUpdates } = updateTaskDto;
+    // Update fields (excluding activities, timer fields, and project fields we already handled) - only update defined fields
+    const { activities, timerStatus, timerStartedAt, projectId: _projectId, projectName: _projectName, ...otherUpdates } = updateTaskDto;
     Object.keys(otherUpdates).forEach(key => {
       if (otherUpdates[key] !== undefined) {
         task[key] = otherUpdates[key];
       }
     });
+
+    // Update project if it was handled
+    if (projectId !== undefined) {
+      task.projectId = projectId;
+    }
     
     // If activities were explicitly provided, use them; otherwise keep the modified array
     if (providedActivities) {

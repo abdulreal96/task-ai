@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import DashboardScreen from './src/screens/DashboardScreen';
 import TaskBoardScreen from './src/screens/TaskBoardScreen';
 import RecordTaskScreen from './src/screens/RecordTaskScreen';
+import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -103,6 +104,7 @@ function AppNavigator() {
       ) : (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen name="CreateTask" component={CreateTaskScreen} />
         </Stack.Navigator>
       )}
     </NavigationContainer>

@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AiModule } from './ai/ai.module';
+import { ProjectsModule } from './projects/projects.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -43,6 +44,8 @@ import configuration from './config/configuration';
     TasksModule,
     
     AiModule,
+
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

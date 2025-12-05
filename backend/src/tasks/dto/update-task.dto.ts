@@ -27,6 +27,14 @@ export class UpdateTaskDto {
   tags?: string[];
 
   @IsOptional()
+  @IsString()
+  projectId?: string;
+
+  @IsOptional()
+  @IsString()
+  projectName?: string;
+
+  @IsOptional()
   timeSpent?: number;
 
   @IsOptional()

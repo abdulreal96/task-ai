@@ -113,6 +113,13 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
 
   const updateTask = async (taskId: string, updates: Partial<Task>) => {
     try {
+      // Auto-stop timer when status changes away from 'in-progress'
+      const currentTask = tasks.find(t => t.id === taskId);
+      if (currentTask && updates.status && updates.status !== 'in-progress' && currentTask.timerStatus === 'running') {
+        console.log('Auto-stopping timer due to status change');
+        updates.timerStatus = 'stopped';
+      }
+
       // Optimistic update
       setTasks(prevTasks => prevTasks.map(t => 
         t.id === taskId ? { ...t, ...updates } : t

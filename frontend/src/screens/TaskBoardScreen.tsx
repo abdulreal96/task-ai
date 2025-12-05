@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Modal, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Clock, MoreVertical, Edit3, Trash2, PlayCircle, Calendar, StopCircle, X, Check, Filter, Search } from 'lucide-react-native';
+import { Clock, MoreVertical, Edit3, Trash2, PlayCircle, Calendar, StopCircle, X, Check, Filter, Search, Plus } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -9,7 +9,7 @@ import { Calendar as RNCalendar } from 'react-native-calendars';
 import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 
-export default function TaskBoardScreen() {
+export default function TaskBoardScreen({ navigation }: any) {
   const { tasks, updateTask, deleteTask, startTimer, stopTimer } = useTasks();
   const { colors, isDarkMode } = useTheme();
   const [activeTab, setActiveTab] = useState('all');
@@ -209,6 +209,12 @@ export default function TaskBoardScreen() {
       case 'timer':
         const t = tasks.find(t => t.id === taskId);
         if (t) {
+          // Only allow timer actions for in-progress tasks
+          if (t.status !== 'in-progress') {
+            showToast('Timer can only be used for tasks in progress', 'warning');
+            setSelectedTask(null);
+            return;
+          }
           try {
             if (isTimerRunning(t)) {
               await stopTimer(taskId);
@@ -575,22 +581,24 @@ export default function TaskBoardScreen() {
               <Text style={[styles.actionText, { color: colors.text }]}>Change Priority</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.actionItem}
-              onPress={() => selectedTask && handleTaskAction(selectedTask, 'timer')}
-            >
-              {selectedTask && tasks.find(t => t.id === selectedTask) && isTimerRunning(tasks.find(t => t.id === selectedTask)!) ? (
-                <>
-                  <StopCircle size={18} color="#ef4444" />
-                  <Text style={[styles.actionText, { color: "#ef4444" }]}>Stop Timer</Text>
-                </>
-              ) : (
-                <>
-                  <Clock size={18} color={colors.text} />
-                  <Text style={[styles.actionText, { color: colors.text }]}>Start Timer</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {selectedTask && tasks.find(t => t.id === selectedTask)?.status === 'in-progress' && (
+              <TouchableOpacity 
+                style={styles.actionItem}
+                onPress={() => selectedTask && handleTaskAction(selectedTask, 'timer')}
+              >
+                {selectedTask && tasks.find(t => t.id === selectedTask) && isTimerRunning(tasks.find(t => t.id === selectedTask)!) ? (
+                  <>
+                    <StopCircle size={18} color="#ef4444" />
+                    <Text style={[styles.actionText, { color: "#ef4444" }]}>Stop Timer</Text>
+                  </>
+                ) : (
+                  <>
+                    <Clock size={18} color={colors.text} />
+                    <Text style={[styles.actionText, { color: colors.text }]}>Start Timer</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
 
             <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
 
@@ -1127,6 +1135,15 @@ export default function TaskBoardScreen() {
 
       {/* Loading Overlay */}
       <LoadingOverlay visible={!!loadingMessage} message={loadingMessage || 'Loading...'} />
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => navigation.navigate('CreateTask')}
+        activeOpacity={0.8}
+      >
+        <Plus size={28} color="#ffffff" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -1628,5 +1645,20 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     borderTopWidth: 1,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

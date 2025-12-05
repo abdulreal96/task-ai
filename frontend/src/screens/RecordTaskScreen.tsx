@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mic, X, Check, Edit3, Send, Sparkles, ListChecks, PenTool } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
+import ProjectSelector from '../components/ProjectSelector';
 import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
@@ -20,6 +21,8 @@ type EditableExtractedTask = {
   tags: string[];
   dueDate: string;
   status: TaskStatus;
+  projectId?: string;
+  projectName?: string;
 };
 
 const PRIORITY_OPTIONS: PriorityLevel[] = ['low', 'medium', 'high', 'urgent'];
@@ -78,6 +81,8 @@ export default function RecordTaskScreen() {
       status: task?.status && STATUS_OPTIONS.includes(task.status)
         ? task.status
         : 'todo',
+      projectId: undefined,
+      projectName: undefined,
     }));
   }, [formatDateInput]);
 
@@ -789,7 +794,7 @@ export default function RecordTaskScreen() {
         const validDueDate = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate : undefined;
         const tags = Array.isArray(taskData.tags) ? taskData.tags.filter(Boolean) : [];
 
-        const taskToSave = {
+        const taskToSave: any = {
           title: taskData.title || 'Untitled Task',
           description: taskData.description || taskData.title || '',
           tags: tags.length > 0 ? tags : ['general'],
@@ -800,6 +805,13 @@ export default function RecordTaskScreen() {
           dueDate: validDueDate,
           timeSpent: 0,
         };
+
+        // Add project info if selected
+        if (taskData.projectId) {
+          taskToSave.projectId = taskData.projectId;
+        } else if (taskData.projectName) {
+          taskToSave.projectName = taskData.projectName;
+        }
         
         await addTask(taskToSave);
       }
@@ -1110,6 +1122,19 @@ export default function RecordTaskScreen() {
                       placeholderTextColor="#94a3b8"
                       value={task.tags.join(', ')}
                       onChangeText={(value) => updateExtractedTaskField(index, 'tags', value)}
+                    />
+
+                    <Text style={styles.editLabel}>Project (optional)</Text>
+                    <ProjectSelector
+                      selectedProjectId={task.projectId}
+                      selectedProjectName={task.projectName}
+                      onSelectProject={(projectId, projectName) => {
+                        setExtractedTasks((prev) =>
+                          prev.map((t, i) =>
+                            i === index ? { ...t, projectId, projectName } : t
+                          )
+                        );
+                      }}
                     />
                   </View>
                 ))}
