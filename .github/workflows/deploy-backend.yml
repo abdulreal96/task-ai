@@ -37,9 +37,14 @@ jobs:
             docker build -t task-ai-backend:latest .
 
             # Run new container with .env file
+            # This container now runs BOTH NestJS API and LiveKit Agent
             docker run -d \
               -p 3000:3000 \
               --restart always \
               --name task-ai-backend \
               --env-file .env \
               task-ai-backend:latest
+
+            # Show running services
+            echo "Deployment complete! Container logs:"
+            docker logs --tail 50 task-ai-backend
