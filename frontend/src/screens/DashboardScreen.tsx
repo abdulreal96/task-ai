@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { Mic, ListTodo, BarChart3, Clock, CheckCircle2, TrendingUp } from 'lucide-react-native';
+import { Mic, ListTodo, BarChart3, Clock, CheckCircle2, TrendingUp, Edit3, Sparkles } from 'lucide-react-native';
 
 export default function DashboardScreen({ navigation }: any) {
   const { tasks } = useTasks();
@@ -83,7 +83,23 @@ export default function DashboardScreen({ navigation }: any) {
               onPress={() => navigation.navigate('Record')}
             >
               <Mic color="#ffffff" size={32} />
-              <Text style={styles.quickActionTextPrimary}>Record Task</Text>
+              <Text style={styles.quickActionTextPrimary}>Voice Recording</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.quickActionButton, { backgroundColor: '#9333ea', borderColor: '#9333ea' }]}
+              onPress={() => navigation.navigate('RecordWithLiveKit')}
+            >
+              <Sparkles color="#ffffff" size={32} />
+              <Text style={[styles.quickActionText, { color: '#ffffff' }]}>AI Assistant</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.quickActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => navigation.navigate('CreateTask')}
+            >
+              <Edit3 color={colors.text} size={32} />
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Manual Task</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -92,22 +108,6 @@ export default function DashboardScreen({ navigation }: any) {
             >
               <ListTodo color={colors.text} size={32} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>View Tasks</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.quickActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => navigation.navigate('Reports')}
-            >
-              <BarChart3 color={colors.text} size={32} />
-              <Text style={[styles.quickActionText, { color: colors.text }]}>Reports</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.quickActionButton}
-              onPress={() => navigation.navigate('Tasks')}
-            >
-              <TrendingUp color="#000000" size={32} />
-              <Text style={styles.quickActionText}>Tags</Text>
             </TouchableOpacity>
           </View>
         </View>
