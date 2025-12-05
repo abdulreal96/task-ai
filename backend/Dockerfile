@@ -26,6 +26,13 @@ RUN npm run build
 # Remove dev dependencies after build
 RUN npm prune --production
 
+# Copy startup script
+COPY start.sh .
+
+# Fix Windows line endings (CRLF) -> Linux (LF) and make executable
+# This prevents "exec format error" or "no such file or directory" on Linux
+RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
+
 # Expose the port your app runs on
 EXPOSE 3000
 
@@ -33,5 +40,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the application
-CMD ["node", "dist/main"]
+# Start both NestJS API and LiveKit Agent
+CMD ["./start.sh"]
