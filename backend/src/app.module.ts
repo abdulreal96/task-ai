@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AiModule } from './ai/ai.module';
 import { ProjectsModule } from './projects/projects.module';
+import { LivekitModule } from './livekit/livekit.module';
 import configuration from './config/configuration';
 
 @Module({
@@ -46,6 +47,8 @@ import configuration from './config/configuration';
     AiModule,
 
     ProjectsModule,
+
+    LivekitModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -3,7 +3,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, CheckSquare, BarChart3, Settings } from 'lucide-react-native';
+import { Home, CheckSquare, BarChart3, Settings, Sparkles } from 'lucide-react-native';
 import { TaskProvider } from './src/context/TaskContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -59,7 +59,8 @@ function MainTabs() {
         name="Record"
         component={RecordTaskScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          tabBarLabel: 'AI Assistant',
+          tabBarIcon: ({ color, size }) => <Sparkles size={size} color={color} />,
         }}
       />
       <Tab.Screen

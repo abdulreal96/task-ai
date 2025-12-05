@@ -11,12 +11,18 @@
       },
       "ios": {
         "buildConfiguration": "Debug"
+      },
+      "env": {
+        "API_URL": "http://10.222.100.104:3000"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "API_URL": "https://task-ai.ilimtutor.com"
       }
     },
     "production": {
@@ -25,6 +31,9 @@
       },
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "env": {
+        "API_URL": "https://task-ai.ilimtutor.com"
       }
     }
   },

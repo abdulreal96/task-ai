@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, StatusBar, TextInput, ScrollView, Alert, Platform, Modal, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Mic, X, Check, Edit3, Send, Sparkles, ListChecks, PenTool, MessageCircle } from 'lucide-react-native';
+import { Mic, X, Check, Edit3, Send, Sparkles, ListChecks, PenTool } from 'lucide-react-native';
 import { useTasks, Task } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import ProjectSelector from '../components/ProjectSelector';
@@ -10,7 +10,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Constants from 'expo-constants';
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import livekitService, { ExtractedTask as LiveKitTask } from '../services/livekit';
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -60,13 +59,6 @@ export default function RecordTaskScreen() {
   const [processingDots, setProcessingDots] = useState('.');
   const [aiMessage, setAiMessage] = useState<string | null>(null);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' | 'warning' | 'info' });
-  
-  // LiveKit AI Assistant state
-  const [isAiMode, setIsAiMode] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [aiStatus, setAiStatus] = useState<string>('');
-  const [aiTranscript, setAiTranscript] = useState<string>('');
-  const [conversationMessages, setConversationMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
     setToast({ visible: true, message, type });
@@ -250,7 +242,7 @@ export default function RecordTaskScreen() {
     setIsSpeechModuleReady(ready);
 
     if (!ready) {
-      showToast("Speech recognition is unavailable on this build. Please install the latest build.", 'error');
+      showToast;
       return;
     }
 
@@ -292,7 +284,7 @@ export default function RecordTaskScreen() {
       }
 
       console.warn("[Speech] No speech services found on device");
-      showToast("No speech recognition service found. Please install 'Speech Services by Google' from the Play Store.", 'error');
+      showToast;
     } catch (error) {
       console.error("[Speech] Service detection error:", error);
     }
@@ -323,12 +315,12 @@ export default function RecordTaskScreen() {
         setHasPermission(requestResult.granted);
         
         if (!requestResult.granted) {
-          showToast("Microphone permission is required for voice recording. Please enable it in your device settings.", 'error');
+          showToast;
         }
       }
     } catch (error: any) {
       console.error("Permission check failed:", error);
-      showToast("Failed to check permissions: " + error.message, 'error');
+      showToast;
     }
   };
 
@@ -518,7 +510,7 @@ export default function RecordTaskScreen() {
         typeof ExpoSpeechRecognitionModule.requestPermissionsAsync !== "function" ||
         typeof ExpoSpeechRecognitionModule.start !== "function"
       ) {
-        showToast("Speech recognition is unavailable. Please reinstall the latest build before recording.", 'error');
+        showToast;
         return;
       }
 
@@ -530,14 +522,14 @@ export default function RecordTaskScreen() {
       
       // Check permission first
       if (hasPermission === false) {
-        showToast("Please enable microphone permission in your device settings to use voice recording.", 'error');
+        showToast;
         return;
       }
 
       // Request permissions again if not sure
       const result = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!result.granted) {
-        showToast("Microphone permission is required for voice recording. Please enable it in your device settings.", 'error');
+        showToast;
         setHasPermission(false);
         return;
       }
@@ -575,7 +567,7 @@ export default function RecordTaskScreen() {
       setIsRecording(true);
     } catch (error: any) {
       console.error("Failed to start recording:", error);
-      showToast("Failed to start speech recognition: " + error.message, 'error');
+      showToast;
     }
   };
 
@@ -700,7 +692,7 @@ export default function RecordTaskScreen() {
         setConversationHistory([]);
         
         if (!data.success) {
-          showToast('Using fallback task extraction. ' + (data.message || ''), 'warning');
+          showToast);
         }
       }
     } catch (error: any) {
@@ -780,92 +772,6 @@ export default function RecordTaskScreen() {
     return tags.length > 0 ? tags : ['general'];
   };
 
-  // LiveKit AI Assistant handlers
-  const startAiConversation = async () => {
-    try {
-      setIsConnecting(true);
-      setAiStatus('Connecting to AI assistant...');
-      
-      // Connect to LiveKit room
-      await livekitService.connect({
-        roomName: `task-assistant-${Date.now()}`,
-        participantName: 'User',
-      });
-
-      // Setup callbacks
-      livekitService.onStatusChange((status) => {
-        setAiStatus(status);
-      });
-
-      livekitService.onTranscript((text) => {
-        setAiTranscript(text);
-        setConversationMessages(prev => [...prev, { role: 'assistant', content: text }]);
-      });
-
-      livekitService.onTasksExtracted((tasks) => {
-        // Convert LiveKit tasks to our format
-        const convertedTasks: EditableExtractedTask[] = tasks.map(task => ({
-          title: task.title,
-          description: task.description || '',
-          priority: task.priority,
-          tags: [],
-          dueDate: task.dueDate || '',
-          status: 'todo',
-          projectId: task.project,
-        }));
-        
-        setExtractedTasks(normalizeExtractedTaskList(convertedTasks));
-        setShowConfirmation(true);
-        setIsAiMode(false);
-      });
-
-      setIsAiMode(true);
-      setIsConnecting(false);
-      showToast('Connected! Start speaking to the AI assistant', 'success');
-    } catch (error: any) {
-      console.error('Failed to start AI conversation:', error);
-      setIsConnecting(false);
-      setIsAiMode(false);
-      showToast(`Failed to connect: ${error.message}`, 'error');
-    }
-  };
-
-  const stopAiConversation = async () => {
-    try {
-      await livekitService.disconnect();
-      setIsAiMode(false);
-      setAiStatus('');
-      setAiTranscript('');
-      setConversationMessages([]);
-      showToast('Disconnected from AI assistant', 'info');
-    } catch (error: any) {
-      console.error('Failed to disconnect:', error);
-      showToast('Disconnect failed', 'error');
-    }
-  };
-
-  const confirmAiTasks = async () => {
-    try {
-      await livekitService.confirmTasks(true);
-      await confirmTasks();
-    } catch (error: any) {
-      console.error('Failed to confirm tasks:', error);
-      showToast('Failed to confirm tasks', 'error');
-    }
-  };
-
-  const rejectAiTasks = async () => {
-    try {
-      await livekitService.confirmTasks(false);
-      setExtractedTasks([]);
-      setShowConfirmation(false);
-      showToast('Tasks rejected. Continue speaking to the AI.', 'info');
-    } catch (error: any) {
-      console.error('Failed to reject tasks:', error);
-      showToast('Failed to reject tasks', 'error');
-    }
-  };
-
   const confirmTasks = async () => {
     try {
       // Save all extracted tasks (can be multiple from AI)
@@ -903,10 +809,10 @@ export default function RecordTaskScreen() {
       setExtractedTasks([]);
       setShowConfirmation(false);
       setAiMessage(null);
-      showToast(`${extractedTasks.length} task(s) saved successfully`, 'success');
+      showToast('`${extractedTasks.length} task(s', 'error'); saved successfully`);
     } catch (error: any) {
       console.error('Failed to save tasks:', error);
-      showToast(`Failed to save tasks: ${error.message || 'Please try again.'}`, 'error');
+      showToast;
     }
   };
 
@@ -919,69 +825,13 @@ export default function RecordTaskScreen() {
         <TouchableOpacity style={styles.closeButton}>
           <X size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AI Assistant</Text>
+        <Text style={styles.headerTitle}>Record Task</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Mode Toggle */}
-      <View style={styles.modeToggleContainer}>
-        <TouchableOpacity 
-          style={[styles.modeButton, !isAiMode && styles.modeButtonActive]}
-          onPress={() => { if (isAiMode) stopAiConversation(); }}
-        >
-          <Mic size={20} color={!isAiMode ? '#ffffff' : '#9ca3af'} />
-          <Text style={[styles.modeButtonText, !isAiMode && styles.modeButtonTextActive]}>Voice Recording</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.modeButton, isAiMode && styles.modeButtonActive]}
-          onPress={startAiConversation}
-          disabled={isConnecting}
-        >
-          <MessageCircle size={20} color={isAiMode ? '#ffffff' : '#9ca3af'} />
-          <Text style={[styles.modeButtonText, isAiMode && styles.modeButtonTextActive]}>
-            {isConnecting ? 'Connecting...' : 'AI Conversation'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* AI Status */}
-      {isAiMode && aiStatus && (
-        <View style={[styles.aiStatusBar, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }]}>
-          <Sparkles size={16} color="#10b981" />
-          <Text style={[styles.aiStatusText, { color: isDarkMode ? '#f9fafb' : '#111827' }]}>{aiStatus}</Text>
-        </View>
-      )}
-
-      {/* AI Conversation View */}
-      {isAiMode && (
-        <ScrollView style={styles.conversationView}>
-          {conversationMessages.map((msg, idx) => (
-            <View key={idx} style={[
-              styles.messageBox,
-              msg.role === 'user' ? styles.userMessage : styles.assistantMessage,
-              { backgroundColor: msg.role === 'user' ? '#2563eb' : (isDarkMode ? '#1f2937' : '#f3f4f6') }
-            ]}>
-              <Text style={[
-                styles.messageText,
-                { color: msg.role === 'user' ? '#ffffff' : (isDarkMode ? '#f9fafb' : '#111827') }
-              ]}>
-                {msg.content}
-              </Text>
-            </View>
-          ))}
-          {aiTranscript && (
-            <View style={[styles.messageBox, styles.assistantMessage, { backgroundColor: isDarkMode ? '#1f2937' : '#f3f4f6' }]}>
-              <Text style={[styles.messageText, { color: isDarkMode ? '#f9fafb' : '#111827', fontStyle: 'italic' }]}>
-                {aiTranscript}
-              </Text>
-            </View>
-          )}
-        </ScrollView>
-      )}
-
       {/* Recording Area */}
       <View style={styles.recordingArea}>
-        {!isProcessing && !showConfirmation && !isAiMode && (
+        {!isProcessing && !showConfirmation && (
           <>
             {/* Microphone Button */}
             <Animated.View style={[styles.micContainer, { transform: [{ scale: pulseAnim }] }]}>
@@ -1123,7 +973,7 @@ export default function RecordTaskScreen() {
               <View style={styles.processingCopy}>
                 <Text style={[styles.processingTitle, { color: isDarkMode ? '#f8fafc' : '#0f172a' }]}>Organizing your tasks{processingDots}</Text>
                 <Text style={[styles.processingSubtitle, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>
-                  I’m reviewing the transcript, grouping similar intents, and preparing clean summaries.
+                  Iâ€™m reviewing the transcript, grouping similar intents, and preparing clean summaries.
                 </Text>
                 <View
                   style={[styles.processingSteps, {
@@ -1146,7 +996,7 @@ export default function RecordTaskScreen() {
                     </View>
                     <View style={styles.processingStepCopy}>
                       <Text style={[styles.processingStepTitle, { color: isDarkMode ? '#f8fafc' : '#0f172a' }]}>Clarify wording</Text>
-                      <Text style={[styles.processingStepText, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>Fix shorthand like “reverse” vs “driver”.</Text>
+                      <Text style={[styles.processingStepText, { color: isDarkMode ? '#cbd5f5' : '#475569' }]}>Fix shorthand like â€œreverseâ€ vs â€œdriverâ€.</Text>
                     </View>
                   </View>
                   <View style={styles.processingStep}>
@@ -1868,66 +1718,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
-  // LiveKit AI Assistant styles
-  modeToggleContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  modeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    gap: 8,
-  },
-  modeButtonActive: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  modeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9ca3af',
-  },
-  modeButtonTextActive: {
-    color: '#ffffff',
-  },
-  aiStatusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  aiStatusText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  conversationView: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  messageBox: {
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
-    maxWidth: '80%',
-  },
-  userMessage: {
-    alignSelf: 'flex-end',
-  },
-  assistantMessage: {
-    alignSelf: 'flex-start',
-  },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
 });
+
 

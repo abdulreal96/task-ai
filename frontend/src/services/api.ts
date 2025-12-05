@@ -1,9 +1,31 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-// Backend server IP address - configurable via app.json
-const API_URL = Constants.expoConfig?.extra?.apiUrl || 'https://task-ai.ilimtutor.com';
+/**
+ * API URL Configuration
+ * - Development mode (Metro): Uses your PC's local IP address
+ * - Production builds: Uses production server from app.json extra.apiUrl
+ */
+const getApiUrl = () => {
+  // Check if running in development mode with Metro
+  const isDevelopment = __DEV__;
+  
+  if (isDevelopment) {
+    // Development mode - use your PC's local IP
+    // This works for both Android emulator and physical devices on same network
+    return 'http://10.222.100.104:3000';
+  }
+  
+  // Production build - use configured API URL
+  return Constants.expoConfig?.extra?.apiUrl || 'https://task-ai.ilimtutor.com';
+};
+
+const API_URL = getApiUrl();
+
+console.log('[API Config] Environment:', __DEV__ ? 'Development' : 'Production');
+console.log('[API Config] Using API URL:', API_URL);
 
 const api = axios.create({
   baseURL: API_URL,
