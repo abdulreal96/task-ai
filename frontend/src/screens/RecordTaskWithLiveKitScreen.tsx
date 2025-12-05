@@ -8,12 +8,13 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Check, Mic, MicOff, X } from 'lucide-react-native';
+import { Check, Edit3, Mic, MicOff, X } from 'lucide-react-native';
 import { useTasks } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
 import liveKitService, { ExtractedTask, TranscriptMessage } from '../services/livekit';
@@ -58,8 +59,16 @@ const mergeConversationMessages = (
 };
 
 const formatDueDateLabel = (dueDate?: string) => {
-  const value = dueDate ? new Date(dueDate) : new Date();
-  return value.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  if (!dueDate) {
+    return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  const parsed = new Date(dueDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return dueDate;
+  }
+
+  return parsed.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
 const priorityChipColors = (priority: ExtractedTask['priority']) => {
@@ -74,6 +83,8 @@ const priorityChipColors = (priority: ExtractedTask['priority']) => {
 };
 
 const projectLabel = (project?: string) => project?.trim() || 'Voice Assistant';
+const PRIORITY_LEVELS: ExtractedTask['priority'][] = ['low', 'medium', 'high'];
+const cloneTasks = (tasks: ExtractedTask[]) => tasks.map((task) => ({ ...task }));
 
 export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
   const { addTask } = useTasks();
@@ -85,6 +96,8 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
   const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
   const [status, setStatus] = useState('Ready to connect');
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isEditingTasks, setIsEditingTasks] = useState(false);
+  const [taskSnapshot, setTaskSnapshot] = useState<ExtractedTask[] | null>(null);
 
   const conversationRef = useRef<ScrollView>(null);
   const waveAnim = useRef(new Animated.Value(0)).current;
@@ -101,7 +114,14 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
     });
 
     liveKitService.onTasksExtracted((tasks) => {
-      setExtractedTasks(tasks);
+      const normalizedTasks = tasks.map((task) => ({
+        ...task,
+        priority: (task.priority ?? 'medium') as ExtractedTask['priority'],
+      }));
+
+      setExtractedTasks(normalizedTasks);
+      setTaskSnapshot(cloneTasks(normalizedTasks));
+      setIsEditingTasks(false);
       setShowConfirmation(true);
     });
 
@@ -167,6 +187,8 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
       setConversation([]);
       setExtractedTasks([]);
       setShowConfirmation(false);
+      setTaskSnapshot(null);
+      setIsEditingTasks(false);
     } catch (error: any) {
       setIsConnecting(false);
       setStatus('Connection failed');
@@ -182,6 +204,8 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
       setConversation([]);
       setExtractedTasks([]);
       setShowConfirmation(false);
+      setTaskSnapshot(null);
+      setIsEditingTasks(false);
     } catch (error: any) {
       Alert.alert('Error', 'Failed to disconnect');
     }
@@ -189,9 +213,23 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
 
   const handleConfirmTasks = async () => {
     try {
+      const preparedTasks = extractedTasks.map((task) => ({
+        ...task,
+        title: task.title?.trim() ?? '',
+        description: task.description?.trim() ?? '',
+        project: task.project?.trim(),
+        dueDate: task.dueDate?.trim(),
+        priority: (task.priority ?? 'medium') as ExtractedTask['priority'],
+      }));
+
+      if (preparedTasks.some((task) => !task.title)) {
+        Alert.alert('Missing title', 'Each task needs a title before saving.');
+        return;
+      }
+
       await liveKitService.confirmTasks(true);
 
-      for (const task of extractedTasks) {
+      for (const task of preparedTasks) {
         const dueDate = task.dueDate ? new Date(task.dueDate) : new Date();
         const taskPayload: any = {
           title: task.title,
@@ -206,8 +244,10 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
         await addTask(taskPayload);
       }
 
-      Alert.alert('Success', `${extractedTasks.length} task(s) created successfully`);
+      Alert.alert('Success', `${preparedTasks.length} task(s) created successfully`);
       setExtractedTasks([]);
+      setTaskSnapshot(null);
+      setIsEditingTasks(false);
       setShowConfirmation(false);
       handleDisconnect();
       navigation.goBack();
@@ -216,17 +256,55 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
     }
   };
 
-  const handleRejectTasks = async () => {
+  const handleDiscardTasks = async () => {
     try {
       await liveKitService.confirmTasks(false);
       setExtractedTasks([]);
+      setTaskSnapshot(null);
+      setIsEditingTasks(false);
       setShowConfirmation(false);
     } catch (error: any) {
       Alert.alert('Error', 'Failed to reject tasks');
     }
   };
 
+  const updateTaskField = (
+    index: number,
+    field: keyof Pick<ExtractedTask, 'title' | 'description' | 'dueDate' | 'project' | 'priority'>,
+    value: string | ExtractedTask['priority'],
+  ) => {
+    setExtractedTasks((prev) => {
+      if (!prev[index]) {
+        return prev;
+      }
+
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        [field]: field === 'priority' ? (value as ExtractedTask['priority']) : (value as string),
+      };
+
+      return updated;
+    });
+  };
+
+  const startEditingTasks = () => {
+    if (extractedTasks.length === 0) {
+      return;
+    }
+    setTaskSnapshot(cloneTasks(extractedTasks));
+    setIsEditingTasks(true);
+  };
+
+  const cancelEditingTasks = () => {
+    if (taskSnapshot) {
+      setExtractedTasks(cloneTasks(taskSnapshot));
+    }
+    setIsEditingTasks(false);
+  };
+
   const sessionStateLabel = isConnected ? 'Assistant is live' : 'Ready when you are';
+  const canSaveTasks = extractedTasks.length > 0 && extractedTasks.every((task) => task.title?.trim().length);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -328,24 +406,106 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
                       style={[styles.generatedTaskCard, { borderColor: colors.border + '44' }]}
                     >
                       <View style={styles.generatedTaskHeader}>
-                        <View style={[styles.metaPill, { backgroundColor: colors.primary + '15' }]}>
-                          <Text style={[styles.metaPillText, { color: colors.primary }]}>{projectLabel(task.project)}</Text>
-                        </View>
-                        <View style={[styles.priorityChip, { backgroundColor: chip.bg }]}>
-                          <Text style={[styles.priorityChipText, { color: chip.text }]}>{task.priority}</Text>
-                        </View>
+                        {isEditingTasks ? (
+                          <TextInput
+                            style={[
+                              styles.editableInput,
+                              styles.projectInput,
+                              { borderColor: colors.border, color: colors.text },
+                            ]}
+                            placeholder="Project"
+                            placeholderTextColor="#94a3b8"
+                            value={task.project ?? ''}
+                            onChangeText={(value) => updateTaskField(index, 'project', value)}
+                          />
+                        ) : (
+                          <View style={[styles.metaPill, { backgroundColor: colors.primary + '15' }]}>
+                            <Text style={[styles.metaPillText, { color: colors.primary }]}>
+                              {projectLabel(task.project)}
+                            </Text>
+                          </View>
+                        )}
+                        {!isEditingTasks && (
+                          <View style={[styles.priorityChip, { backgroundColor: chip.bg }]}>
+                            <Text style={[styles.priorityChipText, { color: chip.text }]}>{task.priority}</Text>
+                          </View>
+                        )}
                       </View>
-                      <Text style={[styles.generatedTaskTitle, { color: colors.text }]}>{task.title}</Text>
-                      {task.description && (
-                        <Text style={[styles.generatedTaskDescription, { color: colors.textSecondary }]}>
-                          {task.description}
-                        </Text>
+
+                      {isEditingTasks ? (
+                        <>
+                          <View style={styles.editField}>
+                            <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Title</Text>
+                            <TextInput
+                              style={[styles.editableInput, { borderColor: colors.border, color: colors.text }]}
+                              value={task.title ?? ''}
+                              onChangeText={(value) => updateTaskField(index, 'title', value)}
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Description</Text>
+                            <TextInput
+                              style={[
+                                styles.editableInput,
+                                styles.multilineInput,
+                                { borderColor: colors.border, color: colors.text },
+                              ]}
+                              multiline
+                              value={task.description ?? ''}
+                              onChangeText={(value) => updateTaskField(index, 'description', value)}
+                            />
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Priority</Text>
+                            <View style={styles.priorityToggleRow}>
+                              {PRIORITY_LEVELS.map((level) => (
+                                <TouchableOpacity
+                                  key={`${task.title}-${level}-${index}`}
+                                  style={[
+                                    styles.priorityToggle,
+                                    { borderColor: colors.border },
+                                    task.priority === level && [styles.priorityToggleActive, { borderColor: colors.primary }],
+                                  ]}
+                                  onPress={() => updateTaskField(index, 'priority', level)}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.priorityToggleText,
+                                      { color: task.priority === level ? colors.primary : colors.textSecondary },
+                                    ]}
+                                  >
+                                    {level}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                          <View style={styles.editField}>
+                            <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Due date</Text>
+                            <TextInput
+                              style={[styles.editableInput, { borderColor: colors.border, color: colors.text }]}
+                              placeholder="YYYY-MM-DD"
+                              placeholderTextColor="#94a3b8"
+                              value={task.dueDate ?? ''}
+                              onChangeText={(value) => updateTaskField(index, 'dueDate', value)}
+                            />
+                          </View>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={[styles.generatedTaskTitle, { color: colors.text }]}>{task.title}</Text>
+                          {task.description && (
+                            <Text style={[styles.generatedTaskDescription, { color: colors.textSecondary }]}>
+                              {task.description}
+                            </Text>
+                          )}
+                          <View style={styles.generatedMetaRow}>
+                            <View style={[styles.metaPill, { backgroundColor: colors.border + '33' }]}>
+                              <Text style={[styles.metaPillText, { color: colors.textSecondary }]}>Due {formatDueDateLabel(task.dueDate)}</Text>
+                            </View>
+                          </View>
+                        </>
                       )}
-                      <View style={styles.generatedMetaRow}>
-                        <View style={[styles.metaPill, { backgroundColor: colors.border + '33' }]}>
-                          <Text style={[styles.metaPillText, { color: colors.textSecondary }]}>Due {formatDueDateLabel(task.dueDate)}</Text>
-                        </View>
-                      </View>
                     </View>
                   );
                 })}
@@ -353,19 +513,25 @@ export default function RecordTaskWithLiveKitScreen({ navigation }: any) {
               <View style={styles.reviewActions}>
                 <TouchableOpacity
                   style={[styles.secondaryButton, { borderColor: colors.border }]}
-                  onPress={handleRejectTasks}
+                  onPress={isEditingTasks ? cancelEditingTasks : startEditingTasks}
                 >
-                  <X size={18} color={colors.text} />
-                  <Text style={[styles.secondaryButtonText, { color: colors.text }]}>Adjust</Text>
+                  {isEditingTasks ? <X size={18} color={colors.text} /> : <Edit3 size={18} color={colors.text} />}
+                  <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+                    {isEditingTasks ? 'Cancel edit' : 'Adjust'}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+                  style={[styles.primaryButton, { backgroundColor: colors.primary, opacity: canSaveTasks ? 1 : 0.5 }]}
                   onPress={handleConfirmTasks}
+                  disabled={!canSaveTasks}
                 >
                   <Check size={18} color="#fff" />
                   <Text style={styles.primaryButtonText}>Save tasks</Text>
                 </TouchableOpacity>
               </View>
+              <TouchableOpacity style={styles.helperLink} onPress={handleDiscardTasks}>
+                <Text style={[styles.helperLinkText, { color: colors.textSecondary }]}>Ask the assistant to try again</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.actionsContainer}>
@@ -614,9 +780,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  editableInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  projectInput: {
+    flex: 1,
+  },
+  editField: {
+    marginTop: 8,
+    gap: 6,
+  },
+  editLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  multilineInput: {
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
+  priorityToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  priorityToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  priorityToggleActive: {
+    backgroundColor: '#eef2ff',
+  },
+  priorityToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
   reviewActions: {
     flexDirection: 'row',
     gap: 12,
+  },
+  helperLink: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  helperLinkText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   primaryButton: {
     flex: 1,

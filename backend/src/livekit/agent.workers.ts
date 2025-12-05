@@ -1,6 +1,14 @@
 import { Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
-import { cli, defineAgent, llm, runWithJobContextAsync, WorkerOptions, type JobContext, voice } from '@livekit/agents';
+import {
+  cli,
+  defineAgent,
+  llm,
+  runWithJobContextAsync,
+  WorkerOptions,
+  type JobContext,
+  voice,
+} from '@livekit/agents';
 import * as openai from '@livekit/agents-plugin-openai';
 import { RoomEvent } from '@livekit/rtc-node';
 import { z } from 'zod';
@@ -55,7 +63,9 @@ const taskSchema = z.object({
   dueDate: z
     .string()
     .optional()
-    .describe('ISO 8601 date (YYYY-MM-DD). Convert natural language before sending'),
+    .describe(
+      'ISO 8601 date (YYYY-MM-DD). Convert natural language before sending',
+    ),
   status: z
     .enum(['todo', 'in-progress', 'completed'])
     .default('todo')
@@ -72,7 +82,8 @@ interface AgentUserData {
   pendingTasks: TaskDraft[];
 }
 
-const DEFAULT_STT_MODEL = process.env.LIVEKIT_STT_MODEL ?? 'deepgram/nova-2-general:en';
+const DEFAULT_STT_MODEL =
+  process.env.LIVEKIT_STT_MODEL ?? 'deepgram/nova-2-general:en';
 const DEFAULT_TTS_MODEL = process.env.LIVEKIT_TTS_MODEL ?? 'cartesia/sonic';
 
 const systemPrompt = `You are TaskMate, a friendly AI that helps busy professionals capture tasks accurately.
@@ -126,8 +137,15 @@ const agentDefinition = defineAgent({
       tts: DEFAULT_TTS_MODEL,
       turnDetection: 'stt',
       voiceOptions: {
-        allowInterruptions: true,
+        allowInterruptions: false,
+        discardAudioIfUninterruptible: false,
+        minInterruptionDuration: 900,
+        minInterruptionWords: 4,
+        minEndpointingDelay: 700,
+        maxEndpointingDelay: 4000,
         maxToolSteps: 4,
+        preemptiveGeneration: true,
+        userAwayTimeout: 12000,
       },
       userData: {
         userId: 'pending-user',
@@ -158,7 +176,9 @@ const agentDefinition = defineAgent({
       applyParticipantMetadata(session, participant);
       logger.log(`Agent ready for user ${session.userData.userId}`);
     } catch (error) {
-      logger.error(`Failed to bind participant metadata: ${formatError(error)}`);
+      logger.error(
+        `Failed to bind participant metadata: ${formatError(error)}`,
+      );
     }
   },
 });
@@ -168,7 +188,8 @@ export default agentDefinition;
 // Provide CommonJS compatibility for LiveKit's dynamic loader
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = agentDefinition;
-  (module.exports as { default?: typeof agentDefinition }).default = agentDefinition;
+  (module.exports as { default?: typeof agentDefinition }).default =
+    agentDefinition;
 }
 
 function buildTooling(room: unknown) {
@@ -181,7 +202,9 @@ function buildTooling(room: unknown) {
         summary: z
           .string()
           .optional()
-          .describe('Short natural language recap you will read back to the user'),
+          .describe(
+            'Short natural language recap you will read back to the user',
+          ),
       }),
       execute: async ({ tasks, summary }, opts: ToolOptions<AgentUserData>) => {
         opts.ctx.userData.pendingTasks = tasks;
@@ -203,7 +226,9 @@ function buildTooling(room: unknown) {
       execute: async (payload, opts: ToolOptions<AgentUserData>) => {
         const userData = opts.ctx.userData;
         if (!userData.authToken) {
-          throw new ToolError('Cannot create tasks without an authenticated user token.');
+          throw new ToolError(
+            'Cannot create tasks without an authenticated user token.',
+          );
         }
 
         const taskInput = normalizeTask(payload);
@@ -251,11 +276,16 @@ function normalizeTask(task: TaskDraft): TaskDraft {
 
 function getApiBaseUrl() {
   return (
-    process.env.BACKEND_API_URL ?? process.env.API_BASE_URL ?? 'http://localhost:3000'
+    process.env.BACKEND_API_URL ??
+    process.env.API_BASE_URL ??
+    'http://localhost:3000'
   );
 }
 
-function applyParticipantMetadata(session: any, participant: { metadata?: string | null; identity?: string }) {
+function applyParticipantMetadata(
+  session: any,
+  participant: { metadata?: string | null; identity?: string },
+) {
   const parsed = parseParticipantMetadata(participant.metadata);
 
   if (parsed.userId) {
@@ -269,7 +299,9 @@ function applyParticipantMetadata(session: any, participant: { metadata?: string
   }
 }
 
-function parseParticipantMetadata(metadata?: string | null): Partial<AgentUserData> {
+function parseParticipantMetadata(
+  metadata?: string | null,
+): Partial<AgentUserData> {
   if (!metadata) {
     return {};
   }
@@ -287,16 +319,16 @@ function parseParticipantMetadata(metadata?: string | null): Partial<AgentUserDa
 }
 
 function registerTranscriptBridge(room: any, session: any) {
-  const handler = (event: any) => {
-    const transcriptSegment = event.transcriptSegments?.[0];
-    if (!transcriptSegment) {
+  const handler = (event: { transcript?: string; isFinal?: boolean; createdAt?: number }) => {
+    const text = event?.transcript?.trim();
+    if (!text) {
       return;
     }
 
     publishData(room, {
       type: 'transcript',
-      text: transcriptSegment.text,
-      isFinal: transcriptSegment.final,
+      text,
+      isFinal: event?.isFinal ?? false,
       speaker: 'user',
       timestamp: event?.createdAt ?? Date.now(),
     });
@@ -330,7 +362,10 @@ function registerAgentSpeechBridge(room: any, session: any) {
 }
 
 function registerConfirmationBridge(room: any, session: any) {
-  const handler = (event: { data: Uint8Array; participant?: { identity?: string } }) => {
+  const handler = (event: {
+    data: Uint8Array;
+    participant?: { identity?: string };
+  }) => {
     const decoded = Buffer.from(event.data).toString('utf8');
     let data: any;
     try {
@@ -350,7 +385,9 @@ function registerConfirmationBridge(room: any, session: any) {
     try {
       session.generateReply({ userInput });
     } catch (error) {
-      logger.error(`Failed to process confirmation message: ${formatError(error)}`);
+      logger.error(
+        `Failed to process confirmation message: ${formatError(error)}`,
+      );
     }
   };
 
@@ -360,11 +397,17 @@ function registerConfirmationBridge(room: any, session: any) {
   });
 }
 
-function registerSessionDiagnostics(ctx: JobContext, session: LiveKitAgentSession) {
+function registerSessionDiagnostics(
+  ctx: JobContext,
+  session: LiveKitAgentSession,
+) {
   session.on(AgentSessionEventTypes.Error, (event) => {
     const sourceName = event?.source?.constructor?.name ?? 'unknown';
-    const ttsModel = (event?.source as { opts?: { model?: string; baseURL?: string } })?.opts?.model;
-    const ttsBaseUrl = (event?.source as { opts?: { baseURL?: string } })?.opts?.baseURL;
+    const ttsModel = (
+      event?.source as { opts?: { model?: string; baseURL?: string } }
+    )?.opts?.model;
+    const ttsBaseUrl = (event?.source as { opts?: { baseURL?: string } })?.opts
+      ?.baseURL;
 
     logger.error(
       [
@@ -397,8 +440,10 @@ function registerSessionDiagnostics(ctx: JobContext, session: LiveKitAgentSessio
 }
 
 function logRuntimeSnapshot(ctx: JobContext) {
-  const wsURL = process.env.LIVEKIT_URL ?? process.env.LIVEKIT_WS_URL ?? 'unset';
-  const gateway = process.env.LIVEKIT_AGENT_GATEWAY ?? 'agent-gateway.livekit.cloud/v1';
+  const wsURL =
+    process.env.LIVEKIT_URL ?? process.env.LIVEKIT_WS_URL ?? 'unset';
+  const gateway =
+    process.env.LIVEKIT_AGENT_GATEWAY ?? 'agent-gateway.livekit.cloud/v1';
   const apiKey = maskSecret(process.env.LIVEKIT_API_KEY);
   const apiSecret = maskSecret(process.env.LIVEKIT_API_SECRET);
   const deepseek = maskSecret(process.env.DEEPSEEK_API_KEY);
@@ -468,7 +513,7 @@ function formatError(error: unknown): string {
 // This MUST be the entry point - do not spawn this file as a child process from NestJS
 if (require.main === module) {
   console.log('Starting LiveKit agent worker...');
-  
+
   process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   });
@@ -479,9 +524,18 @@ if (require.main === module) {
 
   const wsURL = process.env.LIVEKIT_URL || process.env.LIVEKIT_WS_URL;
   console.log('LIVEKIT_WS_URL:', wsURL);
-  console.log('LIVEKIT_API_KEY:', process.env.LIVEKIT_API_KEY ? '****' : 'MISSING');
-  console.log('LIVEKIT_API_SECRET:', process.env.LIVEKIT_API_SECRET ? '****' : 'MISSING');
-  console.log('DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? '****' : 'MISSING');
+  console.log(
+    'LIVEKIT_API_KEY:',
+    process.env.LIVEKIT_API_KEY ? '****' : 'MISSING',
+  );
+  console.log(
+    'LIVEKIT_API_SECRET:',
+    process.env.LIVEKIT_API_SECRET ? '****' : 'MISSING',
+  );
+  console.log(
+    'DEEPSEEK_API_KEY:',
+    process.env.DEEPSEEK_API_KEY ? '****' : 'MISSING',
+  );
 
   try {
     cli.runApp(
