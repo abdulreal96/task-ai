@@ -109,6 +109,22 @@ export default function DashboardScreen({ navigation }: any) {
               <ListTodo color={colors.text} size={32} />
               <Text style={[styles.quickActionText, { color: colors.text }]}>View Tasks</Text>
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.quickActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => navigation.navigate('Reports')}
+            >
+              <BarChart3 color={colors.text} size={32} />
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Reports</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.quickActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => navigation.navigate('CreateTask')}
+            >
+              <Edit3 color={colors.text} size={32} />
+              <Text style={[styles.quickActionText, { color: colors.text }]}>Manual Task</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

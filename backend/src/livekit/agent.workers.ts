@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
-import { cli, defineAgent, llm, type JobContext, voice, runWithJobContext, WorkerOptions } from '@livekit/agents';
+import { cli, defineAgent, llm, runWithJobContextAsync, WorkerOptions, type JobContext, voice } from '@livekit/agents';
+import * as openai from '@livekit/agents-plugin-openai';
 import { RoomEvent } from '@livekit/rtc-node';
 import { z } from 'zod';
 import { createRequire } from 'node:module';
@@ -71,7 +72,6 @@ interface AgentUserData {
   pendingTasks: TaskDraft[];
 }
 
-const DEFAULT_LLM_MODEL = process.env.LIVEKIT_LLM_MODEL ?? 'openai/gpt-4o-mini';
 const DEFAULT_STT_MODEL = process.env.LIVEKIT_STT_MODEL ?? 'deepgram/nova-2-general:en';
 const DEFAULT_TTS_MODEL = process.env.LIVEKIT_TTS_MODEL ?? 'cartesia/sonic';
 
@@ -99,15 +99,29 @@ Guidelines:
 // Initialize logger at module load time
 ensureLivekitLogger();
 
-const agent = defineAgent({
+const agentDefinition = defineAgent({
   entry: async (ctx: JobContext) => {
     logger.log(`Starting agent for room ${ctx.job.room?.name ?? 'unknown'}`);
 
+    // Join the LiveKit room immediately so the JobContext is established
     await ctx.connect();
+
+    // Configure DeepSeek LLM via OpenAI plugin
+    const deepseekLLM = new openai.LLM({
+      model: 'deepseek-chat',
+      baseURL: 'https://api.deepseek.com',
+      apiKey: process.env.DEEPSEEK_API_KEY,
+    });
+
+    const tools = buildTooling(ctx.room);
+    const agent = new Agent<AgentUserData>({
+      instructions: systemPrompt,
+      tools,
+    });
 
     const session = new AgentSession<AgentUserData>({
       stt: DEFAULT_STT_MODEL,
-      llm: DEFAULT_LLM_MODEL,
+      llm: deepseekLLM,
       tts: DEFAULT_TTS_MODEL,
       turnDetection: 'stt',
       voiceOptions: {
@@ -121,22 +135,15 @@ const agent = defineAgent({
       },
     });
 
-    const tools = buildTooling(ctx.room);
-    const agent = new Agent<AgentUserData>({
-      instructions: systemPrompt,
-      tools,
+    await runWithJobContextAsync(ctx, async () => {
+      await session.start({
+        agent,
+        room: ctx.room,
+      });
     });
 
     registerTranscriptBridge(ctx.room, session);
     registerConfirmationBridge(ctx.room, session);
-
-    await runWithJobContext(ctx, async () => {
-      await session.start({
-        agent,
-        room: ctx.room,
-        record: false,
-      });
-    });
 
     ctx.addShutdownCallback(async () => {
       await session.close();
@@ -152,14 +159,13 @@ const agent = defineAgent({
   },
 });
 
-export default agent;
+export default agentDefinition;
 
-// Hack for CJS/ESM interop when loaded via import() in the worker process
-// The LiveKit SDK uses dynamic import() which expects module.exports to be the default export for CJS modules
+// Provide CommonJS compatibility for LiveKit's dynamic loader
 if (typeof module !== 'undefined' && module.exports) {
-  (module as any).exports = agent;
+  module.exports = agentDefinition;
+  (module.exports as { default?: typeof agentDefinition }).default = agentDefinition;
 }
-
 
 function buildTooling(room: unknown) {
   return {
@@ -376,6 +382,7 @@ if (require.main === module) {
   console.log('LIVEKIT_WS_URL:', wsURL);
   console.log('LIVEKIT_API_KEY:', process.env.LIVEKIT_API_KEY ? '****' : 'MISSING');
   console.log('LIVEKIT_API_SECRET:', process.env.LIVEKIT_API_SECRET ? '****' : 'MISSING');
+  console.log('DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? '****' : 'MISSING');
 
   try {
     cli.runApp(
