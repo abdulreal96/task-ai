@@ -17,16 +17,8 @@ export type Activity = {
   timestamp: Date;
 };
 
-export type Tag = {
-  id: string;
-  name: string;
-  color: string;
-  count: number;
-};
-
 interface TaskContextType {
   tasks: Task[];
-  tags: Tag[];
   loading: boolean;
   addTask: (task: Omit<Task, 'id' | '_id' | 'userId' | 'createdAt' | 'updatedAt' | 'activities'>) => Promise<void>;
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>;
@@ -40,7 +32,6 @@ const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export const TaskProvider = ({ children }: { children: ReactNode }) => {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
@@ -67,23 +58,6 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
       
       setTasks(mappedTasks);
       
-      // Extract and count tags
-      const tagCounts = new Map<string, number>();
-      mappedTasks.forEach(task => {
-        task.tags?.forEach(tag => {
-          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-        });
-      });
-      
-      const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#6366f1'];
-      const mappedTags: Tag[] = Array.from(tagCounts.entries()).map(([name, count], index) => ({
-        id: `tag-${name}`,
-        name,
-        color: colors[index % colors.length],
-        count
-      }));
-      
-      setTags(mappedTags);
     } catch (error) {
       console.error('Error fetching tasks:', error);
     } finally {
@@ -179,7 +153,6 @@ export const TaskProvider = ({ children }: { children: ReactNode }) => {
   return (
     <TaskContext.Provider value={{ 
       tasks, 
-      tags, 
       loading,
       addTask, 
       updateTask, 

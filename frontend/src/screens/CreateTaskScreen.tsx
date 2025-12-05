@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Calendar, Tag, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, Calendar, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { useTasks } from '../context/TaskContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -10,7 +10,7 @@ import Toast from '../components/Toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 
 export default function CreateTaskScreen({ navigation }: any) {
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
   const { addTask } = useTasks();
 
   const [title, setTitle] = useState('');
@@ -19,8 +19,6 @@ export default function CreateTaskScreen({ navigation }: any) {
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState('');
   const [projectId, setProjectId] = useState<string | undefined>(undefined);
   const [projectName, setProjectName] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
@@ -42,18 +40,6 @@ export default function CreateTaskScreen({ navigation }: any) {
     { value: 'high', label: 'High', color: '#ef4444' },
     { value: 'urgent', label: 'Urgent', color: '#dc2626' },
   ];
-
-  const handleAddTag = () => {
-    const trimmedTag = tagInput.trim();
-    if (trimmedTag && !tags.includes(trimmedTag)) {
-      setTags([...tags, trimmedTag]);
-      setTagInput('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
-  };
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(Platform.OS === 'ios');
@@ -77,7 +63,6 @@ export default function CreateTaskScreen({ navigation }: any) {
         status,
         priority,
         dueDate: dueDate?.toISOString(),
-        tags: tags.length > 0 ? tags : undefined,
       };
 
       // Add project info
@@ -113,35 +98,40 @@ export default function CreateTaskScreen({ navigation }: any) {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Title Input */}
+        {/* Title */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.text }]}>
-            Title <Text style={styles.required}>*</Text>
+            Task Title <Text style={styles.required}>*</Text>
           </Text>
           <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
+            style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
             placeholder="Enter task title"
             placeholderTextColor={colors.textSecondary}
             value={title}
             onChangeText={setTitle}
+            autoCapitalize="sentences"
           />
         </View>
 
-        {/* Description Input */}
+        {/* Description */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.text }]}>Description</Text>
           <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
-            placeholder="Enter task description (optional)"
+            style={[
+              styles.input,
+              styles.textArea,
+              { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text },
+            ]}
+            placeholder="Add more context (optional)"
             placeholderTextColor={colors.textSecondary}
             value={description}
             onChangeText={setDescription}
             multiline
-            numberOfLines={4}
+            textAlignVertical="top"
           />
         </View>
 
-        {/* Project Selector */}
+        {/* Project */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.text }]}>Project</Text>
           <ProjectSelector
@@ -225,37 +215,6 @@ export default function CreateTaskScreen({ navigation }: any) {
             onChange={handleDateChange}
           />
         )}
-
-        {/* Tags */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: colors.text }]}>Tags</Text>
-          <View style={[styles.tagInputContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Tag size={20} color={colors.textSecondary} />
-            <TextInput
-              style={[styles.tagInput, { color: colors.text }]}
-              placeholder="Add tags (press enter)"
-              placeholderTextColor={colors.textSecondary}
-              value={tagInput}
-              onChangeText={setTagInput}
-              onSubmitEditing={handleAddTag}
-              returnKeyType="done"
-            />
-          </View>
-          {tags.length > 0 && (
-            <View style={styles.tagList}>
-              {tags.map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={[styles.tag, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
-                  onPress={() => handleRemoveTag(tag)}
-                >
-                  <Text style={[styles.tagText, { color: colors.primary }]}>{tag}</Text>
-                  <Text style={[styles.tagRemove, { color: colors.primary }]}>×</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
 
         {/* Info Box */}
         <View style={[styles.infoBox, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
@@ -362,41 +321,6 @@ const styles = StyleSheet.create({
   clearText: {
     fontSize: 14,
     fontWeight: '600',
-  },
-  tagInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
-  },
-  tagInput: {
-    flex: 1,
-    fontSize: 16,
-  },
-  tagList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 4,
-  },
-  tagText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  tagRemove: {
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   infoBox: {
     flexDirection: 'row',

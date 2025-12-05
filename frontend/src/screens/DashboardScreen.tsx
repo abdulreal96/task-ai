@@ -141,11 +141,6 @@ export default function DashboardScreen({ navigation }: any) {
                 >
                   <Text style={[styles.taskTitle, { color: colors.text }]}>{task.title}</Text>
                   <View style={styles.taskMeta}>
-                    {task.tags.slice(0, 3).map((tag: string, index: number) => (
-                      <View key={index} style={[styles.taskTag, { backgroundColor: isDarkMode ? '#1e3a8a' : '#dbeafe' }]}>
-                        <Text style={[styles.taskTagText, { color: isDarkMode ? '#93c5fd' : '#1e40af' }]}>{tag}</Text>
-                      </View>
-                    ))}
                     {task.timeSpent > 0 && (
                       <View style={styles.taskTime}>
                         <Clock size={12} color={colors.textSecondary} />

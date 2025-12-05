@@ -35,7 +35,6 @@ describe('TasksService', () => {
     description: 'Test Description',
     status: 'todo',
     priority: 'medium',
-    tags: ['test'],
     timeSpent: 0,
     timerStatus: 'stopped',
     activities: [
@@ -105,7 +104,6 @@ describe('TasksService', () => {
         title: 'New Task',
         description: 'Task description',
         priority: 'high',
-        tags: ['urgent'],
       };
 
       const saveMock = jest.fn().mockResolvedValue({

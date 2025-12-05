@@ -15,6 +15,7 @@ config({ path: path.resolve(__dirname, '../../.env') });
 const { Agent, AgentSession, AgentSessionEventTypes } = voice;
 const { tool, ToolError } = llm;
 type ToolOptions<UserData = unknown> = llm.ToolOptions<UserData>;
+type LiveKitAgentSession = InstanceType<typeof AgentSession>;
 
 const nodeRequire = createRequire(__filename);
 let loggerInitialized = false;
@@ -55,7 +56,6 @@ const taskSchema = z.object({
     .string()
     .optional()
     .describe('ISO 8601 date (YYYY-MM-DD). Convert natural language before sending'),
-  tags: z.array(z.string()).optional(),
   status: z
     .enum(['todo', 'in-progress', 'completed'])
     .default('todo')
@@ -84,7 +84,7 @@ Workflow:
    • Description (one sentence summary)
    • Priority (low | medium | high | urgent). Default to medium when unstated.
    • Due date when provided. Convert phrases such as "tomorrow" into YYYY-MM-DD.
-   • Tags and project names only when the user provides them.
+  • Project names only when the user provides them.
    • Status defaults to todo unless the user says it is already in progress or finished.
 3. When you think you have enough information call confirm_task_details with an array of tasks. This also sends the list to the mobile app UI, so read the summary naturally and then ask for confirmation.
 4. Wait for explicit confirmation ("yes", "looks good", or the UI confirm button which sends you a text message). Only after a clear confirmation call create_task for each task.
@@ -105,6 +105,7 @@ const agentDefinition = defineAgent({
 
     // Join the LiveKit room immediately so the JobContext is established
     await ctx.connect();
+    logRuntimeSnapshot(ctx);
 
     // Configure DeepSeek LLM via OpenAI plugin
     const deepseekLLM = new openai.LLM({
@@ -135,6 +136,8 @@ const agentDefinition = defineAgent({
       },
     });
 
+    registerSessionDiagnostics(ctx, session);
+
     await runWithJobContextAsync(ctx, async () => {
       await session.start({
         agent,
@@ -143,6 +146,7 @@ const agentDefinition = defineAgent({
     });
 
     registerTranscriptBridge(ctx.room, session);
+    registerAgentSpeechBridge(ctx.room, session);
     registerConfirmationBridge(ctx.room, session);
 
     ctx.addShutdownCallback(async () => {
@@ -241,7 +245,6 @@ function normalizeTask(task: TaskDraft): TaskDraft {
   return {
     ...task,
     dueDate: task.dueDate || undefined,
-    tags: task.tags && task.tags.length > 0 ? task.tags : undefined,
     projectName: task.projectName || undefined,
   };
 }
@@ -294,10 +297,36 @@ function registerTranscriptBridge(room: any, session: any) {
       type: 'transcript',
       text: transcriptSegment.text,
       isFinal: transcriptSegment.final,
+      speaker: 'user',
+      timestamp: event?.createdAt ?? Date.now(),
     });
   };
 
   session.on(AgentSessionEventTypes.UserInputTranscribed, handler);
+}
+
+function registerAgentSpeechBridge(room: any, session: any) {
+  const handler = (event: any) => {
+    const message = event?.item;
+    if (!message || message.role !== 'assistant') {
+      return;
+    }
+
+    const text = message.textContent?.trim();
+    if (!text) {
+      return;
+    }
+
+    publishData(room, {
+      type: 'transcript',
+      text,
+      isFinal: true,
+      speaker: 'agent',
+      timestamp: event?.createdAt ?? Date.now(),
+    });
+  };
+
+  session.on(AgentSessionEventTypes.ConversationItemAdded, handler);
 }
 
 function registerConfirmationBridge(room: any, session: any) {
@@ -329,6 +358,76 @@ function registerConfirmationBridge(room: any, session: any) {
   room.once(RoomEvent.Disconnected, () => {
     room.off(RoomEvent.DataReceived, handler);
   });
+}
+
+function registerSessionDiagnostics(ctx: JobContext, session: LiveKitAgentSession) {
+  session.on(AgentSessionEventTypes.Error, (event) => {
+    const sourceName = event?.source?.constructor?.name ?? 'unknown';
+    const ttsModel = (event?.source as { opts?: { model?: string; baseURL?: string } })?.opts?.model;
+    const ttsBaseUrl = (event?.source as { opts?: { baseURL?: string } })?.opts?.baseURL;
+
+    logger.error(
+      [
+        'Agent session error',
+        `job=${ctx.job.id ?? 'unknown'}`,
+        `room=${ctx.job.room?.name ?? 'unknown'}`,
+        `source=${sourceName}`,
+        ttsModel ? `ttsModel=${ttsModel}` : null,
+        ttsBaseUrl ? `ttsBaseUrl=${ttsBaseUrl}` : null,
+        `message=${formatError(event.error)}`,
+      ]
+        .filter(Boolean)
+        .join(' | '),
+    );
+  });
+
+  session.on(AgentSessionEventTypes.Close, (event) => {
+    logger.warn(
+      [
+        'Agent session closing',
+        `job=${ctx.job.id ?? 'unknown'}`,
+        `room=${ctx.job.room?.name ?? 'unknown'}`,
+        `reason=${event.reason}`,
+        event.error ? `error=${formatError(event.error)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' | '),
+    );
+  });
+}
+
+function logRuntimeSnapshot(ctx: JobContext) {
+  const wsURL = process.env.LIVEKIT_URL ?? process.env.LIVEKIT_WS_URL ?? 'unset';
+  const gateway = process.env.LIVEKIT_AGENT_GATEWAY ?? 'agent-gateway.livekit.cloud/v1';
+  const apiKey = maskSecret(process.env.LIVEKIT_API_KEY);
+  const apiSecret = maskSecret(process.env.LIVEKIT_API_SECRET);
+  const deepseek = maskSecret(process.env.DEEPSEEK_API_KEY);
+
+  logger.log(
+    [
+      'LiveKit agent config snapshot',
+      `job=${ctx.job.id ?? 'unknown'}`,
+      `wsURL=${wsURL}`,
+      `gateway=${gateway}`,
+      `stt=${DEFAULT_STT_MODEL}`,
+      `tts=${DEFAULT_TTS_MODEL}`,
+      `apiKey=${apiKey}`,
+      `apiSecret=${apiSecret}`,
+      `deepseekKey=${deepseek}`,
+    ].join(' | '),
+  );
+}
+
+function maskSecret(value?: string | null): string {
+  if (!value) {
+    return 'missing';
+  }
+
+  if (value.length <= 4) {
+    return `${value} (len=${value.length})`;
+  }
+
+  return `${value.slice(0, 4)}…${value.slice(-2)} (len=${value.length})`;
 }
 
 async function publishData(room: any, payload: unknown) {

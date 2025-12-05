@@ -14,16 +14,6 @@
     ],
     "plugins": [
       [
-        "expo-speech-recognition",
-        {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone to record audio for task creation.",
-          "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to use speech recognition to convert your voice to text.",
-          "androidSpeechServicePackages": [
-            "com.google.android.googlequicksearchbox"
-          ]
-        }
-      ],
-      [
         "expo-build-properties",
         {
           "android": {
@@ -38,7 +28,6 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.taskaimanager.app",
       "infoPlist": {
-        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition to convert your voice to text.",
         "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone to record audio for task creation.",
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera for video calls."
       }

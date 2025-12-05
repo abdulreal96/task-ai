@@ -20,7 +20,6 @@ type EditableExtractedTask = {
   title: string;
   description: string;
   priority: PriorityLevel;
-  tags: string[];
   dueDate: string;
   status: TaskStatus;
   projectId?: string;
@@ -88,9 +87,6 @@ export default function RecordTaskScreen() {
       title: (task?.title || '').trim() || 'Untitled Task',
       description: (task?.description || '').trim(),
       priority: PRIORITY_OPTIONS.includes(task?.priority) ? task.priority : 'medium',
-      tags: Array.isArray(task?.tags)
-        ? task.tags.filter(Boolean).map((tag: string) => tag.trim()).filter(Boolean)
-        : [],
       dueDate: formatDateInput(task?.dueDate) ?? '',
       status: task?.status && STATUS_OPTIONS.includes(task.status)
         ? task.status
@@ -105,17 +101,6 @@ export default function RecordTaskScreen() {
       prev.map((task, taskIndex) => {
         if (taskIndex !== index) {
           return task;
-        }
-
-        if (field === 'tags') {
-          const tagString = typeof value === 'string' ? value : Array.isArray(value) ? value.join(',') : '';
-          return {
-            ...task,
-            tags: tagString
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter(Boolean),
-          };
         }
 
         if (field === 'dueDate') {
@@ -745,39 +730,10 @@ export default function RecordTaskScreen() {
         title: text.slice(0, 50) + (text.length > 50 ? '...' : ''),
         description: text,
         priority: 'medium',
-        tags: extractTags(text),
         dueDate: '',
         status: 'todo',
       }
     ];
-  };
-
-  const extractTags = (text: string): string[] => {
-    const lowerText = text.toLowerCase();
-    const tags: string[] = [];
-    
-    const tagMap: { [key: string]: string } = {
-      'implement': 'implement',
-      'fix': 'fix',
-      'bug': 'bug',
-      'design': 'design',
-      'wallet': 'wallet',
-      'auth': 'authentication',
-      'login': 'authentication',
-      'dashboard': 'dashboard',
-      'api': 'api',
-      'database': 'database'
-    };
-    
-    Object.keys(tagMap).forEach(keyword => {
-      if (lowerText.includes(keyword)) {
-        if (!tags.includes(tagMap[keyword])) {
-          tags.push(tagMap[keyword]);
-        }
-      }
-    });
-    
-    return tags.length > 0 ? tags : ['general'];
   };
 
   // LiveKit AI Assistant handlers
@@ -808,7 +764,6 @@ export default function RecordTaskScreen() {
           title: task.title,
           description: task.description || '',
           priority: task.priority,
-          tags: [],
           dueDate: task.dueDate || '',
           status: 'todo',
           projectId: task.project,
@@ -873,12 +828,10 @@ export default function RecordTaskScreen() {
         // Ensure all required fields are present with proper defaults
         const parsedDueDate = taskData.dueDate ? new Date(taskData.dueDate) : undefined;
         const validDueDate = parsedDueDate && !Number.isNaN(parsedDueDate.getTime()) ? parsedDueDate : undefined;
-        const tags = Array.isArray(taskData.tags) ? taskData.tags.filter(Boolean) : [];
 
         const taskToSave: any = {
           title: taskData.title || 'Untitled Task',
           description: taskData.description || taskData.title || '',
-          tags: tags.length > 0 ? tags : ['general'],
           status: (taskData.status && STATUS_OPTIONS.includes(taskData.status)
             ? taskData.status
             : 'todo') as TaskStatus,
@@ -1251,15 +1204,6 @@ export default function RecordTaskScreen() {
                         </TouchableOpacity>
                       ) : null}
                     </View>
-
-                    <Text style={styles.editLabel}>Tags (comma separated)</Text>
-                    <TextInput
-                      style={[styles.editableInput, { color: editableTextColor }]}
-                      placeholder="e.g. auth, api, dashboard"
-                      placeholderTextColor="#94a3b8"
-                      value={task.tags.join(', ')}
-                      onChangeText={(value) => updateExtractedTaskField(index, 'tags', value)}
-                    />
 
                     <Text style={styles.editLabel}>Project (optional)</Text>
                     <ProjectSelector
@@ -1714,22 +1658,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
     color: '#111827',
-  },
-  extractedTaskTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  extractedTag: {
-    backgroundColor: '#dbeafe',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  extractedTagText: {
-    fontSize: 11,
-    color: '#1e40af',
-    fontWeight: '500',
   },
   editLabel: {
     fontSize: 12,

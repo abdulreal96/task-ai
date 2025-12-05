@@ -10,7 +10,6 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 import DashboardScreen from './src/screens/DashboardScreen';
 import TaskBoardScreen from './src/screens/TaskBoardScreen';
-import RecordTaskScreen from './src/screens/RecordTaskScreen';
 import RecordTaskWithLiveKitScreen from './src/screens/RecordTaskWithLiveKitScreen';
 import CreateTaskScreen from './src/screens/CreateTaskScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
@@ -58,7 +57,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="Record"
-        component={RecordTaskScreen}
+        component={RecordTaskWithLiveKitScreen}
         options={{
           tabBarLabel: 'AI Assistant',
           tabBarIcon: ({ color, size }) => <Sparkles size={size} color={color} />,

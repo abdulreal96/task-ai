@@ -15,9 +15,16 @@ export interface ExtractedTask {
   project?: string;
 }
 
+export interface TranscriptMessage {
+  speaker: 'user' | 'agent';
+  text: string;
+  isFinal?: boolean;
+  timestamp: number;
+}
+
 class LiveKitService {
   private room: Room | null = null;
-  private onTranscriptCallback: ((text: string) => void) | null = null;
+  private onTranscriptCallback: ((message: TranscriptMessage) => void) | null = null;
   private onTasksExtractedCallback: ((tasks: ExtractedTask[]) => void) | null = null;
   private onStatusChangeCallback: ((status: string) => void) | null = null;
 
@@ -92,7 +99,13 @@ class LiveKitService {
         const data = JSON.parse(new TextDecoder().decode(payload));
         
         if (data.type === 'transcript') {
-          this.onTranscriptCallback?.(data.text);
+          const message: TranscriptMessage = {
+            speaker: data.speaker === 'agent' ? 'agent' : 'user',
+            text: data.text,
+            isFinal: data.isFinal,
+            timestamp: typeof data.timestamp === 'number' ? data.timestamp : Date.now(),
+          };
+          this.onTranscriptCallback?.(message);
         } else if (data.type === 'tasks_extracted') {
           this.onTasksExtractedCallback?.(data.tasks);
           this.onStatusChangeCallback?.('Tasks extracted - please confirm');
@@ -112,7 +125,7 @@ class LiveKitService {
     });
   }
 
-  onTranscript(callback: (text: string) => void) {
+  onTranscript(callback: ((message: TranscriptMessage) => void) | null) {
     this.onTranscriptCallback = callback;
   }
 
